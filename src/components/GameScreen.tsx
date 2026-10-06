@@ -26,6 +26,7 @@ import {
   Crown,
   ArrowRight,
   Sparkles,
+  Dices,
 } from 'lucide-react';
 
 interface GameScreenProps {
@@ -51,12 +52,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const questionActivePlayer =
     room.players.find((p) => p.id === room.currentQuestion?.activePlayerId) || activePlayer;
   const isMyTurn = !isHost && activePlayer?.id === myPlayerId;
-  const isBonusRoll = room.status === 'bonus_roll' && room.isBonusRoll;
-  const isMyBonusTurn = !isHost && isBonusRoll && room.bonusPlayerId === myPlayerId;
+
+  const isBonusPhase = room.status === 'bonus_roll' || (room.status === 'moving' && room.isBonusRoll);
+  const isMyBonusTurn = !isHost && room.status === 'bonus_roll' && room.bonusPlayerId === myPlayerId;
+  
   const canRoll =
     !isHost &&
-    ((room.status === 'playing' && isMyTurn) ||
-     (room.status === 'bonus_roll' && isMyBonusTurn));
+    ((room.status === 'playing' && isMyTurn) || isMyBonusTurn);
 
   const toggleSound = () => {
     const muted = sounds.toggleMute();
@@ -74,7 +76,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     try {
       await onRollDice();
     } finally {
-      // Đợi xúc xắc quay xong (550ms) rồi mới hiện hộp thông báo mở câu hỏi
+      // Đợi xúc xắc quay xong (550ms) rồi mới hiện popup
       setTimeout(() => {
         setIsRollingDice(false);
       }, 550);
@@ -200,22 +202,22 @@ export const GameScreen: React.FC<GameScreenProps> = ({
             diceValue={room.diceValue}
             isRolling={isRollingDice}
             canRoll={canRoll}
-            isBonusRoll={isBonusRoll}
+            isBonusRoll={isBonusPhase}
             onRoll={handleRollDice}
             activePlayerName={
-              isBonusRoll
-                ? room.players.find((p) => p.id === room.bonusPlayerId)?.name || 'Người chơi'
+              isBonusPhase
+                ? room.players.find((p) => p.id === room.bonusPlayerId)?.name || activePlayer?.name || 'Người chơi'
                 : activePlayer?.name || 'Người chơi'
             }
             isHost={isHost}
           />
 
           {/* Banner thưởng tinh giản */}
-          {isBonusRoll && (
+          {isBonusPhase && (
             <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-950 text-xs font-semibold flex items-center gap-2">
               <Flame className="w-4 h-4 text-emerald-700 shrink-0" />
               <span>
-                {isMyBonusTurn
+                {room.bonusPlayerId === myPlayerId
                   ? '🎉 Bạn được tặng 1 lượt tung xúc xắc thưởng!'
                   : `🎉 ${activePlayer?.name} được tặng 1 lượt tung xúc xắc thưởng!`}
               </span>
@@ -234,7 +236,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       </main>
 
       {/* ============================================================== */}
-      {/* HỘP THÔNG BÁO: "MỞ CÂU HỎI" SAU KHI TUNG XÚC XẮC XONG */}
+      {/* HỘP THÔNG BÁO: "MỞ CÂU HỎI" SAU KHI TUNG XÚC XẮC THƯỜNG */}
       {/* ============================================================== */}
       {room.status === 'moving' && !room.isBonusRoll && room.currentQuestion && !isRollingDice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs animate-fade-in select-none">
@@ -281,7 +283,54 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* HỘP THÔNG BÁO: KẾT QUẢ TUNG XÚC XẮC THƯỞNG */}
+      {/* HỘP THÔNG BÁO: CHUẨN BỊ TUNG XÚC XẮC THƯỞNG (status === 'bonus_roll') */}
+      {/* ============================================================== */}
+      {room.status === 'bonus_roll' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs animate-fade-in select-none">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-emerald-300 p-5 space-y-4 text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl shadow-inner animate-bounce">
+              🎁
+            </div>
+            
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+                <Flame className="w-3.5 h-3.5 text-emerald-600" />
+                LƯỢT TUNG XÚC XẮC THƯỞNG
+              </div>
+              <h3 className="font-['Playfair_Display',serif] text-base sm:text-lg font-bold text-stone-900">
+                {isMyBonusTurn
+                  ? 'Bạn được tặng 1 lượt tung thưởng!'
+                  : `${activePlayer?.name} được tặng 1 lượt tung thưởng!`}
+              </h3>
+              <p className="text-xs text-stone-600">
+                Trả lời đúng câu hỏi! Hãy tung xúc xắc để tiến thêm các ô thưởng mà không cần trả lời câu hỏi.
+              </p>
+            </div>
+
+            {isMyBonusTurn ? (
+              <div className="pt-2">
+                <button
+                  onClick={handleRollDice}
+                  disabled={isRollingDice}
+                  className="w-full py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-bold text-sm sm:text-base shadow-md cursor-pointer transition-all flex items-center justify-center gap-2"
+                >
+                  <Dices className="w-5 h-5" /> Tung xúc xắc thưởng ngay
+                </button>
+              </div>
+            ) : (
+              <div className="pt-2">
+                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-900 text-xs font-medium flex items-center justify-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping" />
+                  Đang chờ <strong>{activePlayer?.name}</strong> tung xúc xắc thưởng...
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* HỘP THÔNG BÁO: KẾT QUẢ TUNG XÚC XẮC THƯỞNG (status === 'moving' && room.isBonusRoll) */}
       {/* ============================================================== */}
       {room.status === 'moving' && room.isBonusRoll && !isRollingDice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs animate-fade-in select-none">
@@ -291,17 +340,20 @@ export const GameScreen: React.FC<GameScreenProps> = ({
             </div>
             <div className="space-y-1">
               <h3 className="text-base font-bold text-stone-900">
-                {isMyBonusTurn
+                {room.bonusPlayerId === myPlayerId
                   ? `Bạn được thưởng +${room.diceValue} ô!`
                   : `${activePlayer?.name} được thưởng +${room.diceValue} ô!`}
               </h3>
               <p className="text-xs text-stone-600">
                 Quân cờ tiến đến ô số <strong>{room.targetPosition}</strong>.
               </p>
+              <p className="text-[11px] text-emerald-700 font-medium pt-1">
+                Lượt thưởng kết thúc, chuẩn bị chuyển lượt cho người tiếp theo...
+              </p>
             </div>
 
             <div className="pt-2">
-              {isMyBonusTurn || isHost ? (
+              {room.bonusPlayerId === myPlayerId || isHost ? (
                 <button
                   onClick={() => {
                     sounds.playClick();
@@ -402,7 +454,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
                 <li>Người chơi đến lượt tung xúc xắc.</li>
                 <li>Xem số nút đạt được, sau đó bấm hộp <strong>"Mở câu hỏi"</strong> để bắt đầu thử thách.</li>
                 <li>
-                  <strong>Trả lời đúng (trong 60s):</strong> Quân cờ tiến đến ô mục tiêu và được tặng thêm <strong>1 lượt tung xúc xắc thưởng</strong>!
+                  <strong>Trả lời đúng (trong 60s):</strong> Quân cờ tiến đến ô mục tiêu và được tặng thêm <strong>1 lượt tung xúc xắc thưởng</strong> (lượt thưởng không có câu hỏi)!
                 </li>
                 <li>
                   <strong>Trả lời sai hoặc hết 60s:</strong> Giữ nguyên vị trí, quyền trả lời được mở cho các đối thủ còn lại.
