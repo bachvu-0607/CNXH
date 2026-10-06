@@ -61,7 +61,9 @@ export interface CurrentQuestionState {
   originalDiceValue: number;
   targetPosition: number;
   stolenByPlayerId?: string | null;
-  stealStartTime?: number | null; // timestamp for 10s countdown
+  stealStartTime?: number | null; // timestamp for 30s countdown
+  questionStartTime?: number | null; // timestamp for 60s countdown
+  resultWinnerId?: string | null; // player who got points/advancement
   disqualifiedPlayerIds: string[]; // Opponents who failed steal
   playerAnswer?: string;
   result?: 'correct' | 'incorrect' | null;

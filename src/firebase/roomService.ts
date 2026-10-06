@@ -344,15 +344,14 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
           return;
         }
 
-        // Bonus roll finished -> End turn, advance to next player
-        const nextPlayerIndex = (room.currentPlayerIndex + 1) % updatedPlayers.length;
+        // Bonus roll rolling: Show dice result first before advancing
         transaction.update(roomRef, {
-          status: 'playing',
+          status: 'moving',
           diceValue,
-          isBonusRoll: false,
-          bonusPlayerId: null,
+          isBonusRoll: true,
+          bonusPlayerId: playerId,
           players: updatedPlayers,
-          currentPlayerIndex: nextPlayerIndex,
+          targetPosition: newPosition,
           currentQuestion: null,
           updatedAt: serverTimestamp(),
         });
@@ -403,6 +402,8 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
         targetPosition: projectedTarget,
         stolenByPlayerId: null,
         stealStartTime: null,
+        questionStartTime: null,
+        resultWinnerId: null,
         disqualifiedPlayerIds: [],
         playerAnswer: '',
         result: null,
@@ -410,9 +411,9 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
         hintUsedByPlayerIds: [],
       };
 
-      // Open question modal without moving pawn yet
+      // Set status: 'moving' so dice roll animation & target show on board with "Mở câu hỏi" button
       transaction.update(roomRef, {
-        status: 'question',
+        status: 'moving',
         diceValue,
         isBonusRoll: false,
         bonusPlayerId: null,
@@ -427,11 +428,74 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
   }
 }
 
+// 1b. Open Question Modal when active player clicks "Mở câu hỏi"
+export async function openQuestionModal(roomCode: string): Promise<void> {
+  const code = roomCode.trim().toUpperCase();
+  const roomRef = doc(db, 'rooms', code);
+  try {
+    await updateDoc(roomRef, {
+      status: 'question',
+      'currentQuestion.questionStartTime': Date.now(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('openQuestionModal error:', error);
+  }
+}
+
+// 1c. Finish Bonus Roll and Advance Turn to Next Player
+export async function finishBonusRoll(roomCode: string): Promise<void> {
+  const code = roomCode.trim().toUpperCase();
+  const roomRef = doc(db, 'rooms', code);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(roomRef);
+      if (!snap.exists()) return;
+      const room = snap.data() as RoomState;
+      const currentPlayer = room.players[room.currentPlayerIndex];
+      if (!currentPlayer) return;
+
+      // Check win condition
+      if (currentPlayer.completedLap) {
+        transaction.update(roomRef, {
+          status: 'finished',
+          isBonusRoll: false,
+          bonusPlayerId: null,
+          winner: {
+            id: currentPlayer.id,
+            name: currentPlayer.name,
+            avatar: currentPlayer.avatar,
+            color: currentPlayer.color,
+            laps: currentPlayer.laps || 1,
+          },
+          updatedAt: serverTimestamp(),
+        });
+        return;
+      }
+
+      // Advance turn to next player
+      const nextPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
+      transaction.update(roomRef, {
+        status: 'playing',
+        currentPlayerIndex: nextPlayerIndex,
+        isBonusRoll: false,
+        bonusPlayerId: null,
+        diceValue: null,
+        targetPosition: null,
+        currentQuestion: null,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  } catch (error) {
+    console.error('finishBonusRoll error:', error);
+  }
+}
+
 // 2. Submit Player Answer (Automatic Evaluation based on acceptedAnswers)
 export async function submitPlayerAnswer(
   roomCode: string,
   answerText: string,
-  _submittingPlayerId?: string
+  submittingPlayerId?: string
 ): Promise<{ success: boolean; isCorrect: boolean }> {
   const code = roomCode.trim().toUpperCase();
   const roomRef = doc(db, 'rooms', code);
@@ -444,20 +508,95 @@ export async function submitPlayerAnswer(
       const room = snap.data() as RoomState;
       if (!room.currentQuestion) return { success: false, isCorrect: false };
 
+      const q = room.currentQuestion;
+
       // Check correctness using smart Vietnamese keyword matching
       const isCorrect = isAnswerCorrect(
         answerText,
-        room.currentQuestion.officialAnswer,
-        room.currentQuestion.acceptedAnswers
+        q.officialAnswer,
+        q.acceptedAnswers
       );
 
-      // Transition to showing_result so all clients see the evaluation banner
-      transaction.update(roomRef, {
-        'currentQuestion.phase': 'showing_result',
-        'currentQuestion.result': isCorrect ? 'correct' : 'incorrect',
-        'currentQuestion.playerAnswer': answerText,
-        updatedAt: serverTimestamp(),
-      });
+      // CASE 1: Main active player is answering (60s timer)
+      if (q.phase === 'active_answering') {
+        if (isCorrect) {
+          transaction.update(roomRef, {
+            'currentQuestion.phase': 'showing_result',
+            'currentQuestion.result': 'correct',
+            'currentQuestion.resultWinnerId': submittingPlayerId || q.activePlayerId,
+            'currentQuestion.playerAnswer': answerText,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          // If incorrect and opponents exist -> open buzz for opponents!
+          const opponents = room.players.filter((p) => p.id !== q.activePlayerId);
+          if (opponents.length > 0) {
+            transaction.update(roomRef, {
+              'currentQuestion.phase': 'stealing_open',
+              'currentQuestion.playerAnswer': answerText,
+              'currentQuestion.stealStartTime': Date.now(),
+              updatedAt: serverTimestamp(),
+            });
+          } else {
+            transaction.update(roomRef, {
+              'currentQuestion.phase': 'showing_result',
+              'currentQuestion.result': 'incorrect',
+              'currentQuestion.playerAnswer': answerText,
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+        return { success: true, isCorrect };
+      }
+
+      // CASE 2: Stealer is answering (30s timer)
+      if (q.phase === 'stealer_answering') {
+        if (isCorrect) {
+          // Correct! Stealer gets +originalDiceValue
+          const originalDice = q.originalDiceValue || 1;
+          const stealerIndex = room.players.findIndex(
+            (p) => p.id === (submittingPlayerId || q.stolenByPlayerId)
+          );
+
+          let updatedPlayers = [...room.players];
+          if (stealerIndex >= 0) {
+            const stealer = room.players[stealerIndex];
+            const oldPos = stealer.position || 1;
+            let newPos = oldPos + originalDice;
+            let willCompleteLap = stealer.completedLap;
+            let laps = stealer.laps || 0;
+            if (newPos > 24) {
+              newPos = ((newPos - 1) % 24) + 1;
+              willCompleteLap = true;
+              laps += 1;
+            }
+            updatedPlayers[stealerIndex] = {
+              ...stealer,
+              position: newPos,
+              completedLap: willCompleteLap,
+              laps,
+            };
+          }
+
+          transaction.update(roomRef, {
+            'currentQuestion.phase': 'showing_result',
+            'currentQuestion.result': 'correct',
+            'currentQuestion.resultWinnerId': submittingPlayerId || q.stolenByPlayerId,
+            'currentQuestion.playerAnswer': answerText,
+            players: updatedPlayers,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          // Stealer incorrect -> question ends!
+          transaction.update(roomRef, {
+            'currentQuestion.phase': 'showing_result',
+            'currentQuestion.result': 'incorrect',
+            'currentQuestion.playerAnswer': answerText,
+            updatedAt: serverTimestamp(),
+          });
+        }
+        return { success: true, isCorrect };
+      }
 
       return { success: true, isCorrect };
     });
@@ -469,7 +608,42 @@ export async function submitPlayerAnswer(
   }
 }
 
-// 2b. Close Question Modal and Advance Game (Atomic Transaction)
+// 2b. Handle Main Player 60s Timeout (Opens buzzing if opponents exist)
+export async function handleMainPlayerTimeout(roomCode: string): Promise<void> {
+  const code = roomCode.trim().toUpperCase();
+  const roomRef = doc(db, 'rooms', code);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(roomRef);
+      if (!snap.exists()) return;
+      const room = snap.data() as RoomState;
+      if (!room.currentQuestion || room.currentQuestion.phase !== 'active_answering') return;
+
+      const q = room.currentQuestion;
+      const opponents = room.players.filter((p) => p.id !== q.activePlayerId);
+
+      if (opponents.length > 0) {
+        transaction.update(roomRef, {
+          'currentQuestion.phase': 'stealing_open',
+          'currentQuestion.playerAnswer': '(Hết thời gian 60s)',
+          'currentQuestion.stealStartTime': Date.now(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        transaction.update(roomRef, {
+          'currentQuestion.phase': 'showing_result',
+          'currentQuestion.result': 'incorrect',
+          'currentQuestion.playerAnswer': '(Hết thời gian 60s)',
+          updatedAt: serverTimestamp(),
+        });
+      }
+    });
+  } catch (error) {
+    console.error('handleMainPlayerTimeout error:', error);
+  }
+}
+
+// 2c. Close Question Modal and Advance Game (Atomic Transaction)
 export async function closeQuestionAndAdvance(roomCode: string): Promise<void> {
   const code = roomCode.trim().toUpperCase();
   const roomRef = doc(db, 'rooms', code);
@@ -483,7 +657,6 @@ export async function closeQuestionAndAdvance(roomCode: string): Promise<void> {
       if (!room.currentQuestion) return;
 
       const q = room.currentQuestion;
-      const isCorrect = q.result === 'correct';
       const activePlayer =
         room.players.find((p) => p.id === q.activePlayerId) ||
         room.players[room.currentPlayerIndex];
@@ -497,16 +670,12 @@ export async function closeQuestionAndAdvance(roomCode: string): Promise<void> {
         return;
       }
 
-      if (isCorrect) {
-        const diceVal = q.originalDiceValue || room.diceValue || 1;
-        const oldPos = activePlayer.position || 1;
-        let newPos = oldPos + diceVal;
-        let willCompleteLap = activePlayer.completedLap;
+      // CASE A: Active player answered correctly -> advance pawn to targetPosition & give bonus roll!
+      if (q.result === 'correct' && q.resultWinnerId === activePlayer.id) {
+        const targetPos = q.targetPosition || activePlayer.position || 1;
+        const willCompleteLap = activePlayer.completedLap || targetPos < (activePlayer.position || 1);
         let laps = activePlayer.laps || 0;
-
-        if (newPos > 24) {
-          newPos = ((newPos - 1) % 24) + 1;
-          willCompleteLap = true;
+        if (targetPos < (activePlayer.position || 1)) {
           laps += 1;
         }
 
@@ -514,7 +683,7 @@ export async function closeQuestionAndAdvance(roomCode: string): Promise<void> {
           if (p.id === activePlayer.id) {
             return {
               ...p,
-              position: newPos,
+              position: targetPos,
               completedLap: willCompleteLap,
               laps,
             };
@@ -547,24 +716,63 @@ export async function closeQuestionAndAdvance(roomCode: string): Promise<void> {
           isBonusRoll: true,
           bonusPlayerId: activePlayer.id,
           currentQuestion: null,
+          diceValue: null,
+          targetPosition: null,
           updatedAt: serverTimestamp(),
         });
-      } else {
-        // Incorrect answer -> Do not move pawn, advance turn to next player
-        const nextPlayerIndex =
-          room.players.length > 0
-            ? (room.currentPlayerIndex + 1) % room.players.length
-            : 0;
+        return;
+      }
+
+      // CASE B: Stealer answered correctly -> Stealer already got +originalDiceValue in players!
+      if (q.result === 'correct' && q.resultWinnerId && q.resultWinnerId !== activePlayer.id) {
+        const winningPlayer = room.players.find((p) => p.id === q.resultWinnerId);
+        if (winningPlayer && winningPlayer.completedLap) {
+          transaction.update(roomRef, {
+            status: 'finished',
+            currentQuestion: null,
+            winner: {
+              id: winningPlayer.id,
+              name: winningPlayer.name,
+              avatar: winningPlayer.avatar,
+              color: winningPlayer.color,
+              laps: winningPlayer.laps || 1,
+            },
+            updatedAt: serverTimestamp(),
+          });
+          return;
+        }
+
+        // Regular turn rotation to next player
+        const nextPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
         transaction.update(roomRef, {
           status: 'playing',
           currentPlayerIndex: nextPlayerIndex,
           currentQuestion: null,
           diceValue: null,
+          targetPosition: null,
           isBonusRoll: false,
           bonusPlayerId: null,
           updatedAt: serverTimestamp(),
         });
+        return;
       }
+
+      // CASE C: Nobody got it right (Incorrect / Timeout)
+      // Active player does not advance (stays at original position). Next player's turn!
+      const nextPlayerIndex =
+        room.players.length > 0
+          ? (room.currentPlayerIndex + 1) % room.players.length
+          : 0;
+      transaction.update(roomRef, {
+        status: 'playing',
+        currentPlayerIndex: nextPlayerIndex,
+        currentQuestion: null,
+        diceValue: null,
+        targetPosition: null,
+        isBonusRoll: false,
+        bonusPlayerId: null,
+        updatedAt: serverTimestamp(),
+      });
     });
   } catch (error) {
     console.error('closeQuestionAndAdvance error:', error);
@@ -719,7 +927,7 @@ export async function buzzToStealQuestion(
   }
 }
 
-// 5. Handle Steal 10s Timeout (Idempotent Transaction)
+// 5. Handle Steal 30s Timeout (Ends question on timeout as specified)
 export async function handleStealTimeout(
   roomCode: string,
   stealerId: string
@@ -739,39 +947,15 @@ export async function handleStealTimeout(
       if (room.currentQuestion.stolenByPlayerId !== stealerId) return;
 
       const startTs = room.currentQuestion.stealStartTime;
-      if (!startTs || Date.now() - startTs < 9500) return;
+      if (!startTs || Date.now() - startTs < 29000) return;
 
-      // Disqualify this stealer for timeout
-      const nextDisqualified = Array.from(
-        new Set([...(room.currentQuestion.disqualifiedPlayerIds || []), stealerId])
-      );
-
-      const eligibleOpponents = room.players.filter(
-        (p) => !nextDisqualified.includes(p.id) && p.id !== room.currentQuestion?.activePlayerId
-      );
-
-      if (eligibleOpponents.length > 0) {
-        // Re-open buzzing for remaining opponents
-        transaction.update(roomRef, {
-          'currentQuestion.phase': 'stealing_open',
-          'currentQuestion.disqualifiedPlayerIds': nextDisqualified,
-          'currentQuestion.stolenByPlayerId': null,
-          'currentQuestion.stealStartTime': null,
-          'currentQuestion.playerAnswer': '',
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        // All opponents failed -> Turn ends
-        const nextPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
-        transaction.update(roomRef, {
-          status: 'playing',
-          currentPlayerIndex: nextPlayerIndex,
-          currentQuestion: null,
-          diceValue: null,
-          isBonusRoll: false,
-          updatedAt: serverTimestamp(),
-        });
-      }
+      // Stealer timeout (30s) -> end question with incorrect result
+      transaction.update(roomRef, {
+        'currentQuestion.phase': 'showing_result',
+        'currentQuestion.result': 'incorrect',
+        'currentQuestion.playerAnswer': '(Hết thời gian 30s)',
+        updatedAt: serverTimestamp(),
+      });
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
