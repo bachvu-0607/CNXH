@@ -68,35 +68,19 @@ export async function testConnection(): Promise<boolean> {
 export async function createRoom(
   hostName: string,
   hostId: string,
-  hostIsPlayer: boolean = false
+  _hostIsPlayer: boolean = false
 ): Promise<string> {
   const roomCode = generateRoomCode();
   const path = `rooms/${roomCode}`;
 
+  // Quản trò luôn luôn chỉ quan sát & điều phối, không tham gia chơi
   const players: Player[] = [];
-
-  if (hostIsPlayer) {
-    players.push({
-      id: hostId,
-      name: hostName.trim() || 'Người chơi 1',
-      color: PLAYER_COLORS[0].color,
-      colorName: PLAYER_COLORS[0].name,
-      avatar: PLAYER_COLORS[0].avatar,
-      position: 1,
-      hintsRemaining: 2, // Max 2 hint uses
-      isReady: true,
-      connected: true,
-      completedLap: false,
-      laps: 0,
-      joinedAt: Date.now(),
-    });
-  }
 
   const roomData: any = {
     roomCode,
     hostId,
     hostName: hostName.trim() || 'Thầy/Cô Quản Trò',
-    hostIsPlayer,
+    hostIsPlayer: false,
     status: 'lobby',
     players,
     currentPlayerIndex: 0,
@@ -137,6 +121,15 @@ export async function joinRoom(
       }
 
       const room = snap.data() as RoomState;
+
+      // Quản trò không được tham gia thi đấu
+      if (playerId === room.hostId) {
+        return {
+          success: false,
+          message: 'Bạn là Quản trò của phòng này. Quản trò chỉ theo dõi và điều phối, không được tham gia chơi.',
+        };
+      }
+
       const existingPlayerIndex = room.players.findIndex((p) => p.id === playerId);
 
       if (existingPlayerIndex >= 0) {

@@ -1,23 +1,7 @@
 import React from 'react';
-import { Player, CategoryType } from '../types/game';
+import { Player } from '../types/game';
 import { BOARD_SQUARES, CATEGORY_CONFIG } from '../questions/boardData';
-import {
-  Landmark,
-  Scale,
-  Vote,
-  TrendingUp,
-  Factory,
-  GraduationCap,
-  HeartHandshake,
-  Sparkles,
-  TreePine,
-  ShieldCheck,
-  UserCheck,
-  FileSpreadsheet,
-  Award,
-  Compass,
-  Zap,
-} from 'lucide-react';
+import { Compass, BookOpen, Scale, Award, Heart, Shield } from 'lucide-react';
 
 interface BoardProps {
   players: Player[];
@@ -30,37 +14,32 @@ interface BoardProps {
 
 export function getGridPosition(squareId: number): { row: number; col: number } {
   if (squareId >= 1 && squareId <= 7) {
-    return { row: 0, col: squareId - 1 };
+    return { row: 6, col: squareId - 1 };
   } else if (squareId >= 8 && squareId <= 13) {
-    return { row: squareId - 7, col: 6 };
+    return { row: 6 - (squareId - 7), col: 6 };
   } else if (squareId >= 14 && squareId <= 19) {
-    return { row: 6, col: 19 - squareId };
+    return { row: 0, col: 6 - (squareId - 13) };
   } else if (squareId >= 20 && squareId <= 24) {
-    return { row: 25 - squareId, col: 0 };
+    return { row: squareId - 19, col: 0 };
   }
-  return { row: 0, col: 0 };
+  return { row: 6, col: 0 };
 }
 
-function getSquareIcon(category: CategoryType, id: number) {
-  if (id === 1) return <Compass className="w-4 h-4 text-amber-300" />;
-  if (category === 'scenario') return <Zap className="w-3.5 h-3.5 text-purple-600" />;
-  if (category === 'law') return <Scale className="w-3.5 h-3.5 text-emerald-600" />;
-  if (category === 'politics') {
-    if (id === 7) return <Vote className="w-3.5 h-3.5 text-rose-600" />;
-    return <Landmark className="w-3.5 h-3.5 text-rose-600" />;
+function getSquareIcon(category: string, id: number) {
+  if (id === 1) return <Compass className="w-3.5 h-3.5 text-amber-500" />;
+  switch (category) {
+    case 'politics':
+      return <Shield className="w-3 h-3 text-rose-500" />;
+    case 'economy':
+      return <Award className="w-3 h-3 text-amber-500" />;
+    case 'culture_society':
+      return <Heart className="w-3 h-3 text-sky-500" />;
+    case 'law':
+      return <Scale className="w-3 h-3 text-emerald-600" />;
+    case 'knowledge':
+    default:
+      return <BookOpen className="w-3 h-3 text-emerald-700" />;
   }
-  if (category === 'economy') {
-    if (id === 9 || id === 22) return <Factory className="w-3.5 h-3.5 text-amber-600" />;
-    return <TrendingUp className="w-3.5 h-3.5 text-amber-600" />;
-  }
-  if (category === 'knowledge') return <Sparkles className="w-3.5 h-3.5 text-orange-600" />;
-  if (id === 11) return <GraduationCap className="w-3.5 h-3.5 text-sky-600" />;
-  if (id === 17) return <HeartHandshake className="w-3.5 h-3.5 text-sky-600" />;
-  if (id === 19) return <TreePine className="w-3.5 h-3.5 text-sky-600" />;
-  if (id === 20) return <ShieldCheck className="w-3.5 h-3.5 text-rose-600" />;
-  if (id === 21) return <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />;
-  if (id === 24) return <UserCheck className="w-3.5 h-3.5 text-sky-600" />;
-  return <Award className="w-3.5 h-3.5 text-sky-600" />;
 }
 
 export const Board: React.FC<BoardProps> = ({
@@ -80,12 +59,14 @@ export const Board: React.FC<BoardProps> = ({
     });
   };
 
+  const activePlayer = players[currentPlayerIndex];
+
   return (
-    <div className="relative w-full max-w-[850px] aspect-square mx-auto p-2 select-none">
-      {/* Board Frame */}
-      <div className="relative w-full h-full rounded-2xl sm:rounded-3xl p-2 sm:p-2.5 bg-slate-900 border-4 sm:border-8 border-slate-800 shadow-2xl grid grid-cols-7 grid-rows-7 gap-1 sm:gap-1.5">
+    <div className="relative w-full max-w-[820px] aspect-square mx-auto p-1.5 select-none">
+      {/* Khung bàn cờ màu xanh lá rêu trang nhã, viền bo tròn nhẹ */}
+      <div className="relative w-full h-full rounded-2xl sm:rounded-3xl p-2 sm:p-2.5 bg-[#1b3b27] border-4 border-[#142d1e] shadow-lg grid grid-cols-7 grid-rows-7 gap-1 sm:gap-1.5">
         
-        {/* 24 Perimeter Squares */}
+        {/* 24 ô quanh chu vi */}
         {BOARD_SQUARES.map((square) => {
           const { row, col } = getGridPosition(square.id);
           const config = CATEGORY_CONFIG[square.category] || CATEGORY_CONFIG.knowledge;
@@ -101,52 +82,48 @@ export const Board: React.FC<BoardProps> = ({
                 gridRowStart: row + 1,
                 gridColumnStart: col + 1,
               }}
-              className={`relative rounded-lg sm:rounded-xl p-1 sm:p-1.5 flex flex-col justify-between transition-all duration-200 cursor-pointer overflow-hidden border ${
-                config.bgClass
-              } ${isSelected ? 'ring-4 ring-indigo-500 scale-[1.03] z-20 shadow-md' : 'hover:scale-[1.015]'} ${
-                isStart ? 'border-amber-400 font-bold' : config.borderClass
-              }`}
+              className={`relative rounded-xl p-1 sm:p-1.5 flex flex-col justify-between transition-all duration-200 cursor-pointer overflow-hidden border ${
+                isStart
+                  ? 'bg-amber-50/95 border-amber-300'
+                  : 'bg-white/95 hover:bg-white ' + config.borderClass
+              } ${isSelected ? 'ring-2 ring-emerald-500 scale-[1.03] z-20 shadow-md' : 'hover:scale-[1.01]'}`}
             >
-              {/* Header: Square Number & Icon */}
+              {/* Header ô */}
               <div className="flex items-center justify-between w-full">
                 <span
-                  className={`text-[9px] sm:text-[11px] font-black px-1.5 py-0.2 rounded shadow-xs flex items-center gap-1 ${
-                    isStart ? 'bg-amber-400 text-slate-950' : 'bg-white/90 ' + config.textColor
+                  className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                    isStart ? 'bg-amber-200 text-amber-900' : 'bg-stone-100 text-stone-700'
                   }`}
                 >
-                  {isStart ? '⭐ BẮT ĐẦU' : `Ô ${square.id}`}
+                  {isStart ? 'BẮT ĐẦU' : `Ô ${square.id}`}
                 </span>
-                <span className="opacity-90">{getSquareIcon(square.category, square.id)}</span>
+                <span className="opacity-80">{getSquareIcon(square.category, square.id)}</span>
               </div>
 
-              {/* Square Title */}
-              <div className="my-auto py-0.5">
-                <p
-                  className={`text-[9px] sm:text-[11px] font-bold leading-tight line-clamp-3 text-center ${
-                    isStart ? 'text-amber-200 font-extrabold uppercase' : config.textColor
-                  }`}
-                >
+              {/* Tên ô ngắn gọn */}
+              <div className="my-auto py-0.5 text-center">
+                <p className="text-[9px] sm:text-[10px] font-semibold text-stone-800 leading-tight line-clamp-2">
                   {square.name}
                 </p>
               </div>
 
-              {/* Pawns Container */}
-              <div className="h-5 sm:h-6 flex items-center justify-center gap-1">
+              {/* Quân cờ của người chơi */}
+              <div className="h-4 sm:h-5 flex items-center justify-center gap-1">
                 {playersHere.map((p, pIdx) => {
-                  const isActive = players[currentPlayerIndex]?.id === p.id;
+                  const isActive = activePlayer?.id === p.id;
                   return (
                     <div
                       key={p.id}
-                      title={`${p.name} (Vị trí: Ô ${p.position})`}
+                      title={`${p.name} (Ô ${p.position})`}
                       style={{
                         backgroundColor: p.color,
                         transform: `translate(${pIdx * 2}px, 0)`,
                       }}
-                      className={`relative w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-white shadow-md flex items-center justify-center text-[9px] sm:text-[10px] text-white font-black transition-transform ${
-                        isActive ? 'ring-2 ring-amber-400 animate-bounce' : ''
+                      className={`relative w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-white shadow-xs flex items-center justify-center text-[9px] sm:text-[10px] text-white font-bold transition-transform ${
+                        isActive ? 'ring-2 ring-emerald-400 animate-bounce' : ''
                       }`}
                     >
-                      <span className="drop-shadow">{p.name.charAt(0).toUpperCase()}</span>
+                      <span>{p.name.charAt(0).toUpperCase()}</span>
                     </div>
                   );
                 })}
@@ -155,90 +132,65 @@ export const Board: React.FC<BoardProps> = ({
           );
         })}
 
-        {/* Center Canvas Area (5x5 grid cells: rows 2-6, cols 2-6) */}
-        <div className="col-start-2 col-end-7 row-start-2 row-end-7 rounded-xl sm:rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3 sm:p-5 flex flex-col justify-between items-center text-center relative overflow-hidden border border-slate-300 shadow-inner">
+        {/* Trung tâm bàn cờ - Thiết kế tối giản, dịu mắt */}
+        <div className="col-start-2 col-end-7 row-start-2 row-end-7 rounded-xl sm:rounded-2xl bg-[#f4f7f4] p-3 sm:p-5 flex flex-col justify-between items-center text-center relative overflow-hidden border border-emerald-100 shadow-inner">
           
-          {/* Subtle Educational Emblem Watermark */}
-          <div className="absolute inset-0 opacity-[0.035] pointer-events-none flex items-center justify-center">
-            <svg viewBox="0 0 400 400" className="w-[110%] h-[110%] text-slate-900 fill-current">
-              <circle cx="200" cy="200" r="180" stroke="currentColor" strokeWidth="6" fill="none" />
-              <circle cx="200" cy="200" r="140" stroke="currentColor" strokeWidth="4" fill="none" strokeDasharray="6 4" />
-              <circle cx="200" cy="200" r="90" stroke="currentColor" strokeWidth="3" fill="none" />
-              <polygon points="200,50 215,150 310,150 230,200 260,300 200,240 140,300 170,200 90,150 185,150" />
-            </svg>
-          </div>
-
-          {/* Central Header Branding */}
+          {/* Header trung tâm */}
           <div className="relative z-10 w-full pt-1">
-            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 bg-slate-900 text-slate-100 rounded-full text-[11px] font-bold uppercase tracking-wider mb-1 sm:mb-1.5 border border-slate-700">
-              <Compass className="w-3.5 h-3.5 text-amber-400" />
-              Board Game Giáo Dục Chính Trị
-            </div>
-            <h1 className="font-['Playfair_Display',serif] text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight leading-tight">
-              HÀNH TRÌNH LÀM CHỦ
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100/70 text-emerald-800 text-[10px] font-medium tracking-wide mb-1">
+              <Compass className="w-3 h-3 text-emerald-700" /> Hành Trình Làm Chủ
+            </span>
+            <h1 className="font-['Playfair_Display',serif] text-lg sm:text-2xl font-bold text-stone-900 leading-tight">
+              Dân Là Chủ · Dân Làm Chủ
             </h1>
-            <p className="text-xs sm:text-sm font-bold text-slate-600 tracking-wide mt-0.5">
-              Dân là chủ – Dân làm chủ
+            <p className="text-[11px] text-stone-500 mt-0.5">
+              Chủ nghĩa xã hội khoa học · Chương 4
             </p>
           </div>
 
-          {/* Category Guide Legend */}
-          <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 gap-1.5 w-full max-w-md my-1 text-[10px] sm:text-xs">
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-rose-50 text-rose-900 border border-rose-200 font-semibold justify-center">
-              <span className="w-2 h-2 rounded-full bg-rose-600"></span>
-              Đỏ: Chính trị
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-50 text-amber-950 border border-amber-200 font-semibold justify-center">
-              <span className="w-2 h-2 rounded-full bg-amber-600"></span>
-              Vàng: Kinh tế
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-sky-50 text-sky-950 border border-sky-200 font-semibold justify-center">
-              <span className="w-2 h-2 rounded-full bg-sky-600"></span>
-              Xanh: Văn hóa-XH
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 text-emerald-950 border border-emerald-200 font-semibold justify-center">
-              <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-              Lá: Pháp luật
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-orange-50 text-orange-950 border border-orange-200 font-semibold justify-center">
-              <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-              Kem: Kiến thức
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-purple-50 text-purple-950 border border-purple-200 font-semibold justify-center">
-              <span className="w-2 h-2 rounded-full bg-purple-600"></span>
-              Tím: Tình huống
-            </div>
-          </div>
-
-          {/* Active Turn Spotlight in Center */}
-          <div className="relative z-10 w-full max-w-sm bg-white rounded-xl p-2 sm:p-2.5 border border-slate-200 shadow-sm">
-            {players[currentPlayerIndex] ? (
+          {/* Tiêu điểm lượt chơi hiện tại */}
+          <div className="relative z-10 w-full max-w-xs bg-white rounded-xl p-2.5 border border-emerald-100 shadow-xs">
+            {activePlayer ? (
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <div
-                    style={{ backgroundColor: players[currentPlayerIndex].color }}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-white shadow flex items-center justify-center text-white font-black text-xs sm:text-sm"
+                    style={{ backgroundColor: activePlayer.color }}
+                    className="w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shadow-xs"
                   >
-                    {players[currentPlayerIndex].name.charAt(0).toUpperCase()}
+                    {activePlayer.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="text-left">
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                      Lượt thi đấu
-                    </p>
-                    <p className="text-xs sm:text-sm font-extrabold text-slate-900 truncate max-w-[140px]">
-                      {players[currentPlayerIndex].name}
+                    <p className="text-[10px] text-stone-400 font-semibold uppercase">Lượt đi</p>
+                    <p className="text-xs sm:text-sm font-bold text-stone-900 truncate max-w-[120px]">
+                      {activePlayer.name}
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-black px-2 py-0.5 rounded-lg bg-slate-100 text-slate-900 border border-slate-300">
-                    Ô {players[currentPlayerIndex].position}/24
-                  </span>
-                </div>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-900 border border-emerald-200">
+                  Ô {activePlayer.position}/24
+                </span>
               </div>
             ) : (
-              <div className="text-xs text-slate-500 font-bold py-1">Đang chờ các đội vào bàn cờ...</div>
+              <div className="text-xs text-stone-400 py-1 font-medium">
+                Đang chờ người chơi...
+              </div>
             )}
+          </div>
+
+          {/* Ghi chú tối giản về chủ đề */}
+          <div className="relative z-10 flex items-center justify-center gap-3 text-[10px] text-stone-500 font-medium">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-rose-400" /> Chính trị
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-400" /> Kinh tế
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-sky-400" /> Văn hóa - XH
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" /> Pháp luật
+            </span>
           </div>
         </div>
       </div>

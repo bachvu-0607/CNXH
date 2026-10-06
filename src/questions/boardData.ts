@@ -14,10 +14,10 @@ export const CATEGORY_CONFIG: Record<
   start: {
     label: 'Bắt đầu',
     description: 'Ô xuất phát của hành trình dân chủ',
-    bgClass: 'bg-slate-900',
-    badgeClass: 'bg-amber-400 text-slate-950 font-black',
-    textColor: 'text-amber-300',
-    borderClass: 'border-amber-400',
+    bgClass: 'bg-amber-50',
+    badgeClass: 'bg-amber-500 text-white font-bold',
+    textColor: 'text-amber-900',
+    borderClass: 'border-amber-300',
   },
   politics: {
     label: 'Chính trị',

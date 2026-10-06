@@ -44,14 +44,14 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
         angle: 60,
         spread: 55,
         origin: { x: 0 },
-        colors: ['#0F172A', '#D97706', '#2563EB', '#059669'],
+        colors: ['#2e7d32', '#4caf50', '#81c784', '#d4af37'],
       });
       confetti({
         particleCount: 3,
         angle: 120,
         spread: 55,
         origin: { x: 1 },
-        colors: ['#0F172A', '#D97706', '#2563EB', '#059669'],
+        colors: ['#2e7d32', '#4caf50', '#81c784', '#d4af37'],
       });
 
       if (Date.now() < end) {
@@ -62,113 +62,87 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
   }, []);
 
   const getRankBadge = (index: number) => {
-    if (index === 0)
-      return (
-        <span className="w-8 h-8 rounded-full bg-amber-400 text-slate-950 font-black flex items-center justify-center shadow-xs text-base">
-          🥇
-        </span>
-      );
-    if (index === 1)
-      return (
-        <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-800 font-black flex items-center justify-center shadow-xs text-base">
-          🥈
-        </span>
-      );
-    if (index === 2)
-      return (
-        <span className="w-8 h-8 rounded-full bg-amber-700 text-amber-100 font-black flex items-center justify-center shadow-xs text-base">
-          🥉
-        </span>
-      );
-    return (
-      <span className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center border text-xs">
-        #{index + 1}
-      </span>
-    );
+    if (index === 0) return <span className="text-base">🥇</span>;
+    if (index === 1) return <span className="text-base">🥈</span>;
+    if (index === 2) return <span className="text-base">🥉</span>;
+    return <span className="text-xs text-stone-500 font-bold">#{index + 1}</span>;
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col items-center justify-center p-4 select-none">
-      <div className="w-full max-w-xl bg-white rounded-3xl shadow-xl border border-slate-200 p-6 sm:p-8 relative overflow-hidden">
+    <div className="min-h-screen bg-[#f4f7f4] text-stone-800 flex flex-col items-center justify-center p-4 select-none">
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-sm border border-emerald-100 p-6 sm:p-7 relative overflow-hidden space-y-5">
         
         {/* Victory Header */}
-        <div className="text-center space-y-2 mb-6">
-          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 bg-slate-900 text-amber-300 rounded-full font-bold text-xs uppercase shadow-xs">
-            <Sparkles className="w-3.5 h-3.5" /> KẾT THÚC VÁN ĐẤU
+        <div className="text-center space-y-1">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-semibold text-xs">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> Kết thúc ván đấu
           </div>
 
-          <h1 className="font-['Playfair_Display',serif] text-2xl sm:text-3xl font-black text-slate-900">
-            VINH DANH NGƯỜI CHIẾN THẮNG
+          <h1 className="font-['Playfair_Display',serif] text-2xl font-bold text-stone-900">
+            Chúc Mừng Người Chiến Thắng!
           </h1>
-
-          <p className="text-xs sm:text-sm font-semibold text-slate-500">
-            Hành trình dân chủ đã tìm ra người đầu tiên hoàn thành xuất sắc vòng bàn cờ!
-          </p>
         </div>
 
-        {/* Winner Card */}
+        {/* Thẻ Quán Quân */}
         {winner && (
-          <div className="p-5 rounded-2xl bg-slate-900 text-white text-center shadow-md border border-slate-700 mb-6 relative">
-            <Trophy className="w-12 h-12 text-amber-400 mx-auto mb-2 drop-shadow animate-bounce" />
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
-              👑 ĐỘI QUÁN QUÂN
+          <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 text-center space-y-1.5">
+            <Trophy className="w-10 h-10 text-amber-500 mx-auto animate-bounce" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+              👑 Quán Quân
             </span>
-            <h2 className="font-['Playfair_Display',serif] text-2xl sm:text-3xl font-black text-white mt-0.5">
+            <h2 className="font-['Playfair_Display',serif] text-xl font-bold text-stone-900">
               {winner.name}
             </h2>
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-slate-800 font-extrabold text-xs sm:text-sm text-emerald-400 mt-2 border border-slate-700">
-              <Flag className="w-4 h-4" /> Đã hoàn thành 1 vòng và về đích!
+            <div className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full bg-white text-emerald-800 text-xs font-semibold border border-emerald-200 shadow-2xs">
+              <Flag className="w-3.5 h-3.5 text-emerald-600" /> Hoàn thành 1 vòng bàn cờ
             </div>
           </div>
         )}
 
-        {/* Leaderboard Table */}
-        <div className="space-y-2.5 mb-6">
-          <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-            <Medal className="w-4 h-4 text-amber-600" /> THỨ HẠNG CÁC ĐỘI
+        {/* Bảng xếp hạng */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-stone-600 flex items-center gap-1">
+            <Medal className="w-3.5 h-3.5 text-emerald-700" /> Thứ hạng các đội
           </h3>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {sortedPlayers.map((player, idx) => (
               <div
                 key={player.id}
-                style={{ borderColor: idx === 0 ? player.color : undefined }}
-                className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
                   idx === 0
-                    ? 'bg-slate-50 border-2 shadow-xs'
-                    : 'bg-white border-slate-200'
+                    ? 'bg-emerald-50/40 border-emerald-300'
+                    : 'bg-white border-stone-200/80'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  {getRankBadge(idx)}
+                  <div className="w-5 flex justify-center">{getRankBadge(idx)}</div>
                   <div
                     style={{ backgroundColor: player.color }}
-                    className="w-8 h-8 rounded-full text-white font-black text-xs flex items-center justify-center shadow-xs"
+                    className="w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0"
                   >
                     {player.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-xs sm:text-sm font-extrabold text-slate-900">{player.name}</p>
-                    <p className="text-[10px] text-slate-500 font-medium">
+                    <p className="font-bold text-stone-900">{player.name}</p>
+                    <p className="text-[10px] text-stone-500">
                       {player.id === winner?.id
-                        ? 'Đã hoàn thành 1 vòng bàn cờ'
-                        : `Vị trí dừng: Ô ${player.position}/24`}
+                        ? 'Đã hoàn thành 1 vòng'
+                        : `Vị trí: Ô ${player.position}/24`}
                     </p>
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-xs sm:text-sm font-black px-2.5 py-1 rounded-lg bg-slate-100 text-slate-900 border border-slate-200">
-                    Ô {player.position}/24
-                  </span>
-                </div>
+                <span className="font-semibold px-2 py-0.5 rounded bg-stone-100 text-stone-800">
+                  Ô {player.position}
+                </span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+        {/* Nút điều khiển */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
           {isHost ? (
             <button
               onClick={() => {
@@ -176,14 +150,14 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
                 onRestartGame();
               }}
               disabled={isRestarting}
-              className="py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 border border-slate-700"
+              className="py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
             >
               <RotateCcw className="w-4 h-4" />
-              {isRestarting ? 'Đang khởi động...' : 'CHƠI LẠI VÁN MỚI'}
+              {isRestarting ? 'Đang khởi động...' : 'Chơi lại ván mới'}
             </button>
           ) : (
-            <div className="p-2.5 bg-slate-100 rounded-xl text-center text-xs font-bold text-slate-600 flex items-center justify-center">
-              Đang chờ Quản trò bắt đầu ván mới...
+            <div className="p-2.5 bg-stone-50 rounded-xl text-center text-xs text-stone-500 flex items-center justify-center">
+              Đang chờ Quản trò...
             </div>
           )}
 
@@ -192,10 +166,10 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
               sounds.playClick();
               onGoHome();
             }}
-            className="py-3 px-4 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+            className="py-2.5 px-4 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all"
           >
             <Home className="w-4 h-4" />
-            VỀ TRANG CHỦ
+            Về trang chủ
           </button>
         </div>
       </div>
