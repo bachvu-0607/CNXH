@@ -11,14 +11,14 @@ let env: RulesTestEnvironment;
 before(async()=>{ env=await initializeTestEnvironment({projectId:'demo-cnxh',firestore:{rules:readFileSync('firestore.rules','utf8')}}); });
 beforeEach(async()=>{ await env.clearFirestore(); });
 after(async()=>{ await env?.cleanup(); });
-const ref = (uid: string) => doc(env.authenticatedContext(uid).firestore(),'rooms','TEST1');
+const ref = (_uid: string) => doc(env.unauthenticatedContext().firestore(),'rooms','TEST1');
 async function seed(state: RoomState) {
   const data={...state,createdAt:Timestamp.fromMillis(1),updatedAt:Timestamp.fromMillis(1)};
   await env.withSecurityRulesDisabled(async context=>{await setDoc(doc(context.firestore(),'rooms','TEST1'),data);});
 }
 async function read(uid='host') { return (await getDoc(ref(uid))).data() as RoomState; }
 async function action(uid: string, action: GameAction) {
-  const db=env.authenticatedContext(uid).firestore();
+  const db=env.unauthenticatedContext().firestore();
   return transactRoomAction(db as unknown as Firestore, 'TEST1', uid, action);
 }
 async function must(uid: string, command: GameAction) {
@@ -40,24 +40,25 @@ async function close() {
   return must('host',{type:'close',turnId:state.turnId,phase:state.currentQuestion!.phase});
 }
 
-test('authenticated creation, exact lookup, and all seven slots work; anonymous access and listing are denied',async()=>{
+test('guest creation, exact lookup, and all seven slots work; listing is denied',async()=>{
   await assertSucceeds(setDoc(ref('host'),{...room({status:'lobby',players:[]}),createdAt:serverTimestamp(),updatedAt:serverTimestamp(),lastAction:{type:'create',actorId:'host'}}));
   await assertSucceeds(getDoc(ref('invitee')));
-  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'rooms','TEST1')));
+  await assertSucceeds(getDoc(doc(env.unauthenticatedContext().firestore(),'rooms','TEST1')));
   await assertFails(getDocs(collection(env.authenticatedContext('a').firestore(),'rooms')));
+  await assertFails(getDocs(collection(env.unauthenticatedContext().firestore(),'rooms')));
   for(let i=0;i<7;i++) await must(`p${i}`,{type:'join',name:`P${i}`});
   assert.equal((await action('p7',{type:'join',name:'8th'})).success,false);
   const state=await read();
   await assertFails(updateDoc(ref('p7'),{players:[...state.players,player('p7')],updatedAt:serverTimestamp(),lastAction:{type:'join',actorId:'p7'}}));
 });
-test('outsiders cannot update/delete and members cannot forge the host, another player, or a winner',async()=>{
+test('room transitions cannot forge the host, another player, or a winner; room deletion is denied',async()=>{
   await seed(room());
   for(const uid of ['outsider','a']) {
     await assertFails(updateDoc(ref(uid),{winner:{id:uid},status:'finished',updatedAt:serverTimestamp(),lastAction:{type:'close',actorId:uid}}));
     await assertFails(deleteDoc(ref(uid)));
   }
   await assertFails(updateDoc(ref('a'),{hostId:'a',updatedAt:serverTimestamp(),lastAction:{type:'join',actorId:'a'}}));
-  await assertSucceeds(deleteDoc(ref('host')));
+  await assertFails(deleteDoc(ref('host')));
 });
 test('simultaneous readiness and joins survive transaction retries; all seven players can start/restart',async()=>{
   await seed(room({status:'lobby'}));

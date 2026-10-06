@@ -1,13 +1,14 @@
 import { doc, runTransaction, onSnapshot, serverTimestamp, type Unsubscribe } from 'firebase/firestore';
-import { auth, db } from './config';
+import { db } from './config';
+import { getGuestUserId } from './guestIdentity';
 import type { RoomState, QuestionPhase } from '../types/game';
 import type { GameAction } from '../game/engine';
 import { transactRoomAction } from './roomTransactions';
 export { PLAYER_COLORS, rollNormalDice, rollBonusDice } from '../game/engine';
 
 function requireUser(expectedId?: string): string {
-  const id = auth.currentUser?.uid;
-  if (!id || (expectedId && id !== expectedId)) throw new Error('Phiên đăng nhập chưa sẵn sàng. Vui lòng tải lại trang.');
+  const id = expectedId || getGuestUserId();
+  if (!id) throw new Error('Không tạo được mã người chơi. Vui lòng tải lại trang.');
   return id;
 }
 function roomRef(code: string) {
@@ -68,5 +69,5 @@ export const handleStealTimeout = (code: string, turnId: string) =>
 export function subscribeToRoom(code: string, onUpdate: (room: RoomState | null) => void,
   onError: (message: string) => void): Unsubscribe {
   return onSnapshot(roomRef(code), snapshot => onUpdate(snapshot.exists() ? snapshot.data() as RoomState : null),
-    error => onError(error.code === 'permission-denied' ? 'Không có quyền truy cập phòng. Vui lòng đăng nhập lại.' : 'Mất kết nối phòng. Vui lòng thử lại.'));
+    error => onError(error.code === 'permission-denied' ? 'Không có quyền truy cập phòng.' : 'Mất kết nối phòng. Vui lòng thử lại.'));
 }

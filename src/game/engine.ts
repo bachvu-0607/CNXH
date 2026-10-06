@@ -131,7 +131,7 @@ export function applyGameAction(source: RoomState, actorId: string, action: Game
     return success();
   }
   if (action.type === 'leave') {
-    // The host is an observer and can return with the same authenticated identity.
+    // The host is an observer and can return with the same saved guest identity.
     if (!member) return { success: true };
     const index = room.players.findIndex(p => p.id === actorId);
     const departed = room.players[index];

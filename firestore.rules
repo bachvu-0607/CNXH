@@ -1,7 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
+    // The game intentionally supports guests without Firebase Authentication.
+    // Actor identity is a client-held guest ID and is not an authentication claim.
+    function actorId() { return request.resource.data.lastAction.actorId; }
     function validCode(code) { return code.matches('^[A-Z0-9]{5}$'); }
     function b() { return resource.data; }
     function a() { return request.resource.data; }
@@ -17,9 +19,9 @@ service cloud.firestore {
         : p.size() > 6 && p[6] == uid ? 6 : -1;
     }
     function member() {
-      let oldDoc = resource.data; return request.auth.uid == oldDoc.hostId || request.auth.uid in ids(oldDoc); }
+      let oldDoc = resource.data; return actorId() == oldDoc.hostId || actorId() in ids(oldDoc); }
     function host() {
-      let oldDoc = resource.data; return request.auth.uid == oldDoc.hostId; }
+      let oldDoc = resource.data; return actorId() == oldDoc.hostId; }
     function validPlayer(p) {
       return p.keys().hasOnly(['id','name','color','colorName','avatar','position','hintsRemaining','isReady','connected','completedLap','laps','joinedAt'])
         && p.id is string && p.id.size() > 0 && p.id.size() <= 128
@@ -115,19 +117,19 @@ service cloud.firestore {
     function join() {
       let nextDoc = request.resource.data;
       let oldDoc = resource.data;
-      let i = indexOf(oldDoc, request.auth.uid);
+      let i = indexOf(oldDoc, actorId());
       let count = oldDoc.players.size();
-      return sameTurn() && only(['players']) && request.auth.uid != oldDoc.hostId && (
+      return sameTurn() && only(['players']) && actorId() != oldDoc.hostId && (
         i >= 0 ? sameOtherPlayers(i, ['name','connected']) && nextDoc.players[i].connected == true && validPlayer(nextDoc.players[i])
         : oldDoc.status == 'lobby' && count < 7 && nextDoc.players.size() == count + 1
           && nextDoc.players.removeAll([nextDoc.players[count]]) == oldDoc.players
-          && validPlayer(nextDoc.players[count]) && nextDoc.players[count].id == request.auth.uid && nextDoc.players[count].position == 1
+          && validPlayer(nextDoc.players[count]) && nextDoc.players[count].id == actorId() && nextDoc.players[count].position == 1
           && nextDoc.players[count].hintsRemaining == 2 && nextDoc.players[count].laps == 0
           && nextDoc.players[count].isReady == false && nextDoc.players[count].connected == true);
     }
     function ready() {
       let oldDoc = resource.data;
-      let i = indexOf(oldDoc, request.auth.uid);
+      let i = indexOf(oldDoc, actorId());
       return oldDoc.status == 'lobby' && sameTurn() && only(['players'])
         && sameOtherPlayers(i, ['isReady'])
         && request.resource.data.players[i].isReady is bool;
@@ -156,29 +158,29 @@ service cloud.firestore {
       let i = oldDoc.currentPlayerIndex;
       let dice = nextDoc.diceValue;
       let q = nextDoc.currentQuestion;
-      return request.auth.uid == oldDoc.players[i].id && sameTurn()
+      return actorId() == oldDoc.players[i].id && sameTurn()
         && dice is int && dice >= 1 && dice <= 6 && nextDoc.currentPlayerIndex == i && (
         oldDoc.status == 'playing' ? (
           only(['status','diceValue','isBonusRoll','bonusPlayerId','targetPosition','currentQuestion','usedQuestionKeys'])
           && nextDoc.status == 'moving' && nextDoc.isBonusRoll == false && nextDoc.bonusPlayerId == null
           && nextDoc.targetPosition == ((oldDoc.players[i].position + dice - 1) % 24) + 1
           && q.targetPosition == nextDoc.targetPosition && q.squareId == nextDoc.targetPosition && q.originalDiceValue == dice
-          && q.activePlayerId == request.auth.uid && q.phase == 'active_answering'
+          && q.activePlayerId == actorId() && q.phase == 'active_answering'
           && q.questionStartTime == null && q.stealStartTime == null && q.stolenByPlayerId == null
           && q.resultWinnerId == null && q.result == null && q.playerAnswer == ''
           && q.hintUsedByPlayerIds == [] && nowish(q.phaseStartedAt)
-        ) : oldDoc.status == 'bonus_roll' && oldDoc.isBonusRoll && oldDoc.bonusPlayerId == request.auth.uid
+        ) : oldDoc.status == 'bonus_roll' && oldDoc.isBonusRoll && oldDoc.bonusPlayerId == actorId()
           && only(['status','players','diceValue','targetPosition','currentQuestion','isBonusRoll','bonusPlayerId','winner'])
           && moved(i, dice)
           && (nextDoc.players[i].completedLap ? finished(i) :
-            nextDoc.status == 'moving' && nextDoc.isBonusRoll && nextDoc.bonusPlayerId == request.auth.uid
+            nextDoc.status == 'moving' && nextDoc.isBonusRoll && nextDoc.bonusPlayerId == actorId()
             && nextDoc.targetPosition == nextDoc.players[i].position && nextDoc.winner == null));
     }
     function open() {
       let nextDoc = request.resource.data;
       let oldDoc = resource.data;
       let q = nextDoc.currentQuestion;
-      return (host() || request.auth.uid == oldDoc.players[oldDoc.currentPlayerIndex].id)
+      return (host() || actorId() == oldDoc.players[oldDoc.currentPlayerIndex].id)
         && oldDoc.status == 'moving' && !oldDoc.isBonusRoll && oldDoc.currentQuestion.questionStartTime == null
         && sameTurn() && only(['status','currentQuestion']) && nextDoc.status == 'question'
         && q.diff(oldDoc.currentQuestion).affectedKeys().hasOnly(['questionStartTime','phaseStartedAt'])
@@ -196,7 +198,7 @@ service cloud.firestore {
       return oldDoc.status == 'question' && old.phase in ['active_answering','stealer_answering']
         && questionOnly(['phase','phaseStartedAt','result','resultWinnerId','playerAnswer','stealStartTime'])
         && nowish(q.phaseStartedAt) && q.playerAnswer is string && q.playerAnswer.size() <= 500
-        && (timeout ? request.time.toMillis() >= deadline : request.auth.uid == owner && request.time.toMillis() < deadline)
+        && (timeout ? request.time.toMillis() >= deadline : actorId() == owner && request.time.toMillis() < deadline)
         && ((!timeout && q.result == 'correct') ?
           q.phase == 'showing_result' && q.resultWinnerId == owner && q.stealStartTime == old.stealStartTime
           : main && oldDoc.players.size() > 1 ?
@@ -209,24 +211,24 @@ service cloud.firestore {
       let old = oldDoc.currentQuestion;
       let q = nextDoc.currentQuestion;
       return oldDoc.status == 'question' && old.phase == 'stealing_open' && old.stolenByPlayerId == null
-        && request.auth.uid in ids(oldDoc) && request.auth.uid != old.activePlayerId
+        && actorId() in ids(oldDoc) && actorId() != old.activePlayerId
         && request.time.toMillis() < old.stealStartTime + 12000
         && questionOnly(['phase','phaseStartedAt','stolenByPlayerId','stealStartTime','playerAnswer'])
-        && q.phase == 'stealer_answering' && q.stolenByPlayerId == request.auth.uid
+        && q.phase == 'stealer_answering' && q.stolenByPlayerId == actorId()
         && nowish(q.stealStartTime) && q.phaseStartedAt == q.stealStartTime && q.playerAnswer == '';
     }
     function hint() {
       let nextDoc = request.resource.data;
       let oldDoc = resource.data;
-      let i = indexOf(oldDoc,request.auth.uid);
+      let i = indexOf(oldDoc,actorId());
       return oldDoc.status == 'question' && oldDoc.currentQuestion.phase != 'showing_result'
         && sameTurn() && only(['players','currentQuestion']) && sameOtherPlayers(i, ['hintsRemaining'])
         && oldDoc.players[i].hintsRemaining > 0
         && nextDoc.players[i].hintsRemaining == oldDoc.players[i].hintsRemaining - 1
         && nextDoc.players[i].hintsRemaining is int && nextDoc.players[i].hintsRemaining >= 0 && nextDoc.players[i].hintsRemaining <= 2
         && nextDoc.currentQuestion.diff(oldDoc.currentQuestion).affectedKeys().hasOnly(['hintUsedByPlayerIds'])
-        && !(request.auth.uid in oldDoc.currentQuestion.hintUsedByPlayerIds)
-        && nextDoc.currentQuestion.hintUsedByPlayerIds == oldDoc.currentQuestion.hintUsedByPlayerIds.concat([request.auth.uid]);
+        && !(actorId() in oldDoc.currentQuestion.hintUsedByPlayerIds)
+        && nextDoc.currentQuestion.hintUsedByPlayerIds == oldDoc.currentQuestion.hintUsedByPlayerIds.concat([actorId()]);
     }
     function close() {
       let nextDoc = request.resource.data;
@@ -263,7 +265,7 @@ service cloud.firestore {
     function leave() {
       let nextDoc = request.resource.data;
       let oldDoc = resource.data;
-      let i = indexOf(oldDoc,request.auth.uid);
+      let i = indexOf(oldDoc,actorId());
       let q = oldDoc.currentQuestion;
       return i >= 0 && nextDoc.players == oldDoc.players.removeAll([oldDoc.players[i]])
         && only(['players','currentPlayerIndex','status','diceValue','targetPosition','currentQuestion','isBonusRoll','bonusPlayerId','winner'])
@@ -278,7 +280,7 @@ service cloud.firestore {
               && nextDoc.status == oldDoc.status && nextDoc.diceValue == oldDoc.diceValue && nextDoc.isBonusRoll == oldDoc.isBonusRoll
               && nextDoc.bonusPlayerId == oldDoc.bonusPlayerId && nextDoc.targetPosition == oldDoc.targetPosition
               && (nextDoc.currentQuestion == q ||
-                q != null && (q.stolenByPlayerId == request.auth.uid || q.resultWinnerId == request.auth.uid || q.phase == 'stealing_open' && nextDoc.players.size() == 1)
+                q != null && (q.stolenByPlayerId == actorId() || q.resultWinnerId == actorId() || q.phase == 'stealing_open' && nextDoc.players.size() == 1)
                 && nextDoc.currentQuestion.diff(q).affectedKeys().hasOnly(['phase','phaseStartedAt','result','resultWinnerId','playerAnswer','stolenByPlayerId'])
                 && nextDoc.currentQuestion.phase == 'showing_result' && nextDoc.currentQuestion.result == 'incorrect'
                 && nextDoc.currentQuestion.resultWinnerId == null && nowish(nextDoc.currentQuestion.phaseStartedAt)));
@@ -289,7 +291,7 @@ service cloud.firestore {
       let type = next.lastAction.type;
       return next.roomCode == old.roomCode && next.hostId == old.hostId && next.hostName == old.hostName
         && next.createdAt == old.createdAt && next.updatedAt == request.time
-        && next.lastAction.actorId == request.auth.uid && validRoom(next)
+        && next.lastAction.actorId == actorId() && validRoom(next)
         && (type == 'join' ? join() : member() && (
           type == 'ready' ? ready() : type in ['start','restart'] ? start() : type == 'leave' ? leave()
           : type == 'roll' ? roll() : type == 'open' ? open() : type in ['answer','timeout'] ? answerOrTimeout()
@@ -298,15 +300,16 @@ service cloud.firestore {
     }
     match /rooms/{code} {
       // Exact code lookup supports invitations; listing every room is forbidden.
-      allow get: if signedIn() && validCode(code);
+      allow get: if validCode(code);
       allow list: if false;
-      allow create: if signedIn() && validCode(code) && validRoom(a())
-        && a().roomCode == code && a().hostId == request.auth.uid && a().players == []
+      allow create: if validCode(code) && validRoom(a())
+        && a().roomCode == code && a().hostId == actorId() && a().players == []
         && a().status == 'lobby' && clearNewRoom() && a().winner == null && a().usedQuestionKeys == []
         && a().createdAt == request.time && a().updatedAt == request.time
-        && a().lastAction == {'type':'create','actorId':request.auth.uid};
-      allow update: if signedIn() && validCode(code) && validUpdate();
-      allow delete: if signedIn() && host();
+        && a().lastAction == {'type':'create','actorId':actorId()};
+      allow update: if validCode(code) && validUpdate();
+      // Rooms are not deleted by the client; keep deletion unavailable to guests.
+      allow delete: if false;
     }
     function clearNewRoom() {
       let nextDoc = request.resource.data;

@@ -2,14 +2,14 @@
 
 Trò chơi dành cho một quản trò quan sát và tối đa **7 người chơi/đội**. Người chơi đi hết một vòng 24 ô để thắng. Lượt chính có 60 giây trả lời, cửa sổ cướp quyền 12 giây và người cướp có 30 giây trả lời. Mỗi người có 2 gợi ý mỗi ván.
 
-Dùng Node.js 22.12+ hoặc 24 và Bun để cài từ lockfile:
+Dùng Node.js 22.12+ hoặc 24 và npm để cài từ lockfile:
 
 ```sh
-bun install --frozen-lockfile
+npm ci
 npm run dev
 ```
 
-Firebase Authentication cần bật nhà cung cấp **Anonymous**. Ứng dụng chờ UID xác thực ổn định trước khi tạo/vào phòng, không dùng UID giả từ localStorage.
+Người chơi vào bằng mã khách lưu trên trình duyệt; Firebase Authentication không cần bật. Người có mã phòng có thể đọc và tham gia phòng, vì vậy chỉ chia sẻ liên kết với nhóm chơi.
 
 Kiểm tra:
 

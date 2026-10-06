@@ -90,7 +90,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     }
   };
 
-  // Any authenticated member can recover expired phases. The transaction checks
+  // Any room member can recover expired phases. The transaction checks
   // the expected turn, phase and deadline, so duplicate/stale requests are no-ops.
   useEffect(() => {
     let disposed = false;
