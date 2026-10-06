@@ -438,10 +438,9 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
 export async function submitPlayerAnswer(
   roomCode: string,
   answerText: string,
-  submittingPlayerId: string
+  _submittingPlayerId?: string
 ): Promise<{ success: boolean; isCorrect: boolean }> {
   const code = roomCode.trim().toUpperCase();
-  const path = `rooms/${code}`;
   const roomRef = doc(db, 'rooms', code);
 
   try {
@@ -452,223 +451,178 @@ export async function submitPlayerAnswer(
       const room = snap.data() as RoomState;
       if (!room.currentQuestion) return { success: false, isCorrect: false };
 
-      const isMainPhase = room.currentQuestion.phase === 'active_answering';
-      const isStealPhase = room.currentQuestion.phase === 'stealer_answering';
-
-      // Validate who is submitting
-      if (isMainPhase && room.currentQuestion.activePlayerId !== submittingPlayerId) {
-        return { success: false, isCorrect: false };
-      }
-      if (isStealPhase && room.currentQuestion.stolenByPlayerId !== submittingPlayerId) {
-        return { success: false, isCorrect: false };
-      }
-
-      // Check correctness
+      // Check correctness using smart Vietnamese keyword matching
       const isCorrect = isAnswerCorrect(
         answerText,
         room.currentQuestion.officialAnswer,
         room.currentQuestion.acceptedAnswers
       );
 
-      // CASE A: MAIN PLAYER SUBMITTED
-      if (isMainPhase) {
-        const activePlayer = room.players.find((p) => p.id === room.currentQuestion?.activePlayerId);
-        if (!activePlayer) return { success: false, isCorrect: false };
+      // Transition to showing_result so all clients see the evaluation banner
+      transaction.update(roomRef, {
+        'currentQuestion.phase': 'showing_result',
+        'currentQuestion.result': isCorrect ? 'correct' : 'incorrect',
+        'currentQuestion.playerAnswer': answerText,
+        updatedAt: serverTimestamp(),
+      });
 
-        if (isCorrect) {
-          const diceVal = room.currentQuestion.originalDiceValue;
-          const oldPos = activePlayer.position || 1;
-          let newPos = oldPos + diceVal;
-          let willCompleteLap = activePlayer.completedLap;
-          let laps = activePlayer.laps || 0;
-
-          if (newPos > 24) {
-            newPos = ((newPos - 1) % 24) + 1;
-            willCompleteLap = true;
-            laps += 1;
-          }
-
-          const updatedPlayers = room.players.map((p) => {
-            if (p.id === activePlayer.id) {
-              return {
-                ...p,
-                position: newPos,
-                completedLap: willCompleteLap,
-                laps,
-              };
-            }
-            return p;
-          });
-
-          // Check win condition
-          if (willCompleteLap) {
-            transaction.update(roomRef, {
-              status: 'finished',
-              players: updatedPlayers,
-              'currentQuestion.phase': 'resolved',
-              'currentQuestion.result': 'correct',
-              'currentQuestion.playerAnswer': answerText,
-              winner: {
-                id: activePlayer.id,
-                name: activePlayer.name,
-                avatar: activePlayer.avatar,
-                color: activePlayer.color,
-                laps,
-              },
-              updatedAt: serverTimestamp(),
-            });
-            return { success: true, isCorrect: true };
-          }
-
-          // Move to bonus roll
-          transaction.update(roomRef, {
-            status: 'bonus_roll',
-            players: updatedPlayers,
-            isBonusRoll: true,
-            bonusPlayerId: activePlayer.id,
-            'currentQuestion.phase': 'resolved',
-            'currentQuestion.result': 'correct',
-            'currentQuestion.playerAnswer': answerText,
-            updatedAt: serverTimestamp(),
-          });
-          return { success: true, isCorrect: true };
-        } else {
-          // Main player incorrect -> Open Stealing
-          const otherPlayers = room.players.filter((p) => p.id !== activePlayer.id);
-
-          if (otherPlayers.length === 0) {
-            // No opponents -> End turn
-            const nextPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
-            transaction.update(roomRef, {
-              status: 'playing',
-              currentPlayerIndex: nextPlayerIndex,
-              currentQuestion: null,
-              diceValue: null,
-              isBonusRoll: false,
-              updatedAt: serverTimestamp(),
-            });
-            return { success: true, isCorrect: false };
-          }
-
-          // Open stealing for all other players
-          transaction.update(roomRef, {
-            'currentQuestion.phase': 'stealing_open',
-            'currentQuestion.disqualifiedPlayerIds': [activePlayer.id],
-            'currentQuestion.playerAnswer': answerText,
-            'currentQuestion.result': 'incorrect',
-            'currentQuestion.stolenByPlayerId': null,
-            'currentQuestion.stealStartTime': null,
-            updatedAt: serverTimestamp(),
-          });
-          return { success: true, isCorrect: false };
-        }
-      }
-
-      // CASE B: STEALER SUBMITTED
-      if (isStealPhase) {
-        const stealer = room.players.find((p) => p.id === submittingPlayerId);
-        if (!stealer) return { success: false, isCorrect: false };
-
-        if (isCorrect) {
-          const diceVal = room.currentQuestion.originalDiceValue;
-          const oldPos = stealer.position || 1;
-          let newPos = oldPos + diceVal;
-          let willCompleteLap = stealer.completedLap;
-          let laps = stealer.laps || 0;
-
-          if (newPos > 24) {
-            newPos = ((newPos - 1) % 24) + 1;
-            willCompleteLap = true;
-            laps += 1;
-          }
-
-          const updatedPlayers = room.players.map((p) => {
-            if (p.id === stealer.id) {
-              return {
-                ...p,
-                position: newPos,
-                completedLap: willCompleteLap,
-                laps,
-              };
-            }
-            return p;
-          });
-
-          // Check win condition for stealer
-          if (willCompleteLap) {
-            transaction.update(roomRef, {
-              status: 'finished',
-              players: updatedPlayers,
-              'currentQuestion.phase': 'resolved',
-              'currentQuestion.result': 'correct',
-              'currentQuestion.playerAnswer': answerText,
-              winner: {
-                id: stealer.id,
-                name: stealer.name,
-                avatar: stealer.avatar,
-                color: stealer.color,
-                laps,
-              },
-              updatedAt: serverTimestamp(),
-            });
-            return { success: true, isCorrect: true };
-          }
-
-          // Stealer does not get bonus roll -> Advance to next player
-          const nextPlayerIndex = (room.currentPlayerIndex + 1) % updatedPlayers.length;
-          transaction.update(roomRef, {
-            status: 'playing',
-            players: updatedPlayers,
-            currentPlayerIndex: nextPlayerIndex,
-            currentQuestion: null,
-            diceValue: null,
-            isBonusRoll: false,
-            updatedAt: serverTimestamp(),
-          });
-          return { success: true, isCorrect: true };
-        } else {
-          // Stealer incorrect -> Disqualify this stealer
-          const nextDisqualified = Array.from(
-            new Set([...(room.currentQuestion.disqualifiedPlayerIds || []), submittingPlayerId])
-          );
-
-          const eligibleOpponents = room.players.filter(
-            (p) => !nextDisqualified.includes(p.id) && p.id !== room.currentQuestion?.activePlayerId
-          );
-
-          if (eligibleOpponents.length > 0) {
-            // Re-open buzzing for remaining opponents!
-            transaction.update(roomRef, {
-              'currentQuestion.phase': 'stealing_open',
-              'currentQuestion.disqualifiedPlayerIds': nextDisqualified,
-              'currentQuestion.stolenByPlayerId': null,
-              'currentQuestion.stealStartTime': null,
-              'currentQuestion.playerAnswer': answerText,
-              updatedAt: serverTimestamp(),
-            });
-          } else {
-            // All opponents failed -> Turn ends
-            const nextPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
-            transaction.update(roomRef, {
-              status: 'playing',
-              currentPlayerIndex: nextPlayerIndex,
-              currentQuestion: null,
-              diceValue: null,
-              isBonusRoll: false,
-              updatedAt: serverTimestamp(),
-            });
-          }
-          return { success: true, isCorrect: false };
-        }
-      }
-
-      return { success: false, isCorrect: false };
+      return { success: true, isCorrect };
     });
 
     return result;
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
+    console.error('submitPlayerAnswer error:', error);
     return { success: false, isCorrect: false };
+  }
+}
+
+// 2b. Close Question Modal and Advance Game (Atomic Transaction)
+export async function closeQuestionAndAdvance(roomCode: string): Promise<void> {
+  const code = roomCode.trim().toUpperCase();
+  const roomRef = doc(db, 'rooms', code);
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(roomRef);
+      if (!snap.exists()) return;
+
+      const room = snap.data() as RoomState;
+      if (!room.currentQuestion) return;
+
+      const q = room.currentQuestion;
+      const isCorrect = q.result === 'correct';
+      const activePlayer =
+        room.players.find((p) => p.id === q.activePlayerId) ||
+        room.players[room.currentPlayerIndex];
+
+      if (!activePlayer) {
+        transaction.update(roomRef, {
+          status: 'playing',
+          currentQuestion: null,
+          updatedAt: serverTimestamp(),
+        });
+        return;
+      }
+
+      if (isCorrect) {
+        const diceVal = q.originalDiceValue || room.diceValue || 1;
+        const oldPos = activePlayer.position || 1;
+        let newPos = oldPos + diceVal;
+        let willCompleteLap = activePlayer.completedLap;
+        let laps = activePlayer.laps || 0;
+
+        if (newPos > 24) {
+          newPos = ((newPos - 1) % 24) + 1;
+          willCompleteLap = true;
+          laps += 1;
+        }
+
+        const updatedPlayers = room.players.map((p) => {
+          if (p.id === activePlayer.id) {
+            return {
+              ...p,
+              position: newPos,
+              completedLap: willCompleteLap,
+              laps,
+            };
+          }
+          return p;
+        });
+
+        // Win condition: completed lap
+        if (willCompleteLap) {
+          transaction.update(roomRef, {
+            status: 'finished',
+            players: updatedPlayers,
+            currentQuestion: null,
+            winner: {
+              id: activePlayer.id,
+              name: activePlayer.name,
+              avatar: activePlayer.avatar,
+              color: activePlayer.color,
+              laps,
+            },
+            updatedAt: serverTimestamp(),
+          });
+          return;
+        }
+
+        // Correct answer -> Move to bonus roll!
+        transaction.update(roomRef, {
+          status: 'bonus_roll',
+          players: updatedPlayers,
+          isBonusRoll: true,
+          bonusPlayerId: activePlayer.id,
+          currentQuestion: null,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // Incorrect answer -> Do not move pawn, advance turn to next player
+        const nextPlayerIndex =
+          room.players.length > 0
+            ? (room.currentPlayerIndex + 1) % room.players.length
+            : 0;
+        transaction.update(roomRef, {
+          status: 'playing',
+          currentPlayerIndex: nextPlayerIndex,
+          currentQuestion: null,
+          diceValue: null,
+          isBonusRoll: false,
+          bonusPlayerId: null,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    });
+  } catch (error) {
+    console.error('closeQuestionAndAdvance error:', error);
+  }
+}
+
+// 2d. Allow Host to Join as Player in Lobby
+export async function addHostAsPlayer(
+  roomCode: string,
+  hostId: string,
+  hostName: string
+): Promise<boolean> {
+  const code = roomCode.trim().toUpperCase();
+  const path = `rooms/${code}`;
+  const roomRef = doc(db, 'rooms', code);
+
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(roomRef);
+      if (!snap.exists()) return false;
+
+      const room = snap.data() as RoomState;
+      if (room.players.some((p) => p.id === hostId)) return true;
+      if (room.players.length >= 4) return false;
+
+      const colorConfig = PLAYER_COLORS[room.players.length] || PLAYER_COLORS[0];
+      const newPlayer: Player = {
+        id: hostId,
+        name: hostName.trim() || `Quản trò (${room.players.length + 1})`,
+        color: colorConfig.color,
+        colorName: colorConfig.name,
+        avatar: colorConfig.avatar,
+        position: 1,
+        hintsRemaining: 2,
+        isReady: true,
+        connected: true,
+        completedLap: false,
+        laps: 0,
+        joinedAt: Date.now(),
+      };
+
+      transaction.update(roomRef, {
+        players: [...room.players, newPlayer],
+        hostIsPlayer: true,
+        updatedAt: serverTimestamp(),
+      });
+      return true;
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+    return false;
   }
 }
 

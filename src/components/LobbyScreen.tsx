@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { RoomState } from '../types/game';
 import { sounds } from '../utils/audio';
-import { togglePlayerReady } from '../firebase/roomService';
+import { togglePlayerReady, addHostAsPlayer } from '../firebase/roomService';
 import {
   Users,
   Copy,
@@ -15,6 +15,7 @@ import {
   Link2,
   CheckCircle2,
   Clock,
+  UserPlus,
 } from 'lucide-react';
 
 interface LobbyScreenProps {
@@ -145,9 +146,23 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             </div>
           </div>
 
-          <span className="px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
-            {room.hostIsPlayer ? 'Host cùng chơi' : 'Host chỉ điều phối'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
+              {room.hostIsPlayer ? 'Host cùng chơi' : 'Host chỉ điều phối'}
+            </span>
+            {isHost && !myPlayer && room.players.length < 4 && (
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  addHostAsPlayer(room.roomCode, myPlayerId, room.hostName);
+                }}
+                className="px-2.5 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black cursor-pointer shadow-xs transition-all flex items-center gap-1 active:scale-95"
+              >
+                <UserPlus className="w-3 h-3" /> Tham gia thi đấu
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Teams / Players List */}

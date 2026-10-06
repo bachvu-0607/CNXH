@@ -8,8 +8,7 @@ import { BOARD_SQUARES, CATEGORY_CONFIG } from '../questions/boardData';
 import { sounds } from '../utils/audio';
 import {
   submitPlayerAnswer,
-  buzzToStealQuestion,
-  handleStealTimeout,
+  closeQuestionAndAdvance,
   usePlayerHint,
 } from '../firebase/roomService';
 import {
@@ -193,8 +192,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           myPlayerId={myPlayerId}
           isHost={isHost}
           onAnswerSubmit={(text) => submitPlayerAnswer(room.roomCode, text, myPlayerId)}
-          onBuzzToSteal={() => buzzToStealQuestion(room.roomCode, myPlayerId)}
-          onStealTimeout={(stealerId) => handleStealTimeout(room.roomCode, stealerId)}
+          onCloseQuestion={() => closeQuestionAndAdvance(room.roomCode)}
           onUseHint={() => usePlayerHint(room.roomCode, myPlayerId)}
         />
       )}

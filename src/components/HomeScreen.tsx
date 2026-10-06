@@ -32,6 +32,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   });
   const [roomCode, setRoomCode] = useState(initialRoomCode || '');
   const [mode, setMode] = useState<'create' | 'join'>(initialRoomCode ? 'join' : 'create');
+  const [hostIsPlayer, setHostIsPlayer] = useState(true);
   const [showRules, setShowRules] = useState(false);
 
   useEffect(() => {
@@ -49,11 +50,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!playerName.trim()) {
-      alert('Vui lòng nhập tên của Quản trò');
+      alert('Vui lòng nhập tên của Quản trò / Người chơi');
       return;
     }
     sounds.playClick();
-    onCreateRoom(playerName.trim(), false);
+    onCreateRoom(playerName.trim(), hostIsPlayer);
   };
 
   const handleJoin = (e: React.FormEvent) => {
@@ -161,8 +162,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           {mode === 'create' ? (
             <form onSubmit={handleCreate} className="space-y-4 pt-1">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600">
-                📌 <strong>Quy trình Quản trò (Host)</strong>: Quản trò tạo phòng, chia sẻ link/mã phòng cho tối đa 4 đội. Khi người chơi sẵn sàng, Quản trò bấm Bắt đầu, theo dõi câu trả lời và chấm đúng/sai.
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-2">
+                <p>
+                  📌 <strong>Quy trình</strong>: Quản trò tạo phòng, chia sẻ link/mã phòng cho tối đa 4 đội. Máy sẽ tự động kiểm tra đáp án, hiển thị kết quả và đóng câu hỏi.
+                </p>
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 pt-1 border-t border-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={hostIsPlayer}
+                    onChange={(e) => setHostIsPlayer(e.target.checked)}
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span>Quản trò đồng thời là Người chơi (tự chơi / cùng thi đấu)</span>
+                </label>
               </div>
 
               <button
