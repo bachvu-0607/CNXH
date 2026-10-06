@@ -23,6 +23,9 @@ function answer(state: RoomState, actor = 'a', text = state.currentQuestion!.off
 function close(state: RoomState, now = 100_000) {
   return act(state, 'host', { type:'close', turnId:state.turnId, phase:state.currentQuestion!.phase }, now);
 }
+function rejectReview(state: RoomState, now = 100_000) {
+  return act(state, 'host', { type:'review', correct:false, turnId:state.turnId, phase:'host_review' }, now);
+}
 
 test('exactly seven players can join; host cannot play; used colors are not reassigned', () => {
   let state = room({ status:'lobby', players:[] });
@@ -57,6 +60,7 @@ test('duplicate bonus completion and delayed commands cannot skip a player or er
 });
 test('late stealing-window closure cannot interrupt the accepted stealer', () => {
   let state = answer(questionRoom(),'a','zzz');
+  state = rejectReview(state);
   state = act(state,'b',{type:'buzz',turnId:state.turnId},110_000);
   const result = applyGameAction(state,'host',{type:'close',turnId:state.turnId,phase:'stealing_open'},ctx(113_000));
   assert.equal(result.success,false);
@@ -77,6 +81,7 @@ test('wrong sender, late answers, duplicate answers and stale phases are rejecte
   assert.equal(applyGameAction(source,'b',{type:'answer',turnId:source.turnId,phase:'active_answering',answer:source.currentQuestion!.officialAnswer},ctx()).success,false);
   assert.equal(applyGameAction(source,'a',{type:'answer',turnId:source.turnId,phase:'active_answering',answer:source.currentQuestion!.officialAnswer},ctx(160_000)).success,false);
   let state = answer(source,'a','zzz');
+  state = rejectReview(state);
   state = act(state,'b',{type:'buzz',turnId:state.turnId});
   assert.equal(applyGameAction(state,'a',{type:'answer',turnId:state.turnId,phase:'stealer_answering',answer:state.currentQuestion!.officialAnswer},ctx()).success,false);
   state = answer(state,'b');
@@ -85,6 +90,31 @@ test('wrong sender, late answers, duplicate answers and stale phases are rejecte
   assert.equal(state.players[1].position,4);
   assert.equal(state.currentPlayerIndex,1);
   assert.equal(applyGameAction(state,'b',{type:'close',turnId:'turn-1',phase:'showing_result'},ctx()).success,false);
+});
+test('host can accept an unmatched synonym or reject it to open the steal window', () => {
+  let state = answer(questionRoom(),'a','a valid synonym the matcher does not know');
+  assert.equal(state.currentQuestion!.phase,'host_review');
+  assert.equal(applyGameAction(state,'b',{type:'review',correct:true,turnId:state.turnId,phase:'host_review'},ctx()).success,false);
+  state = act(state,'host',{type:'review',correct:true,turnId:state.turnId,phase:'host_review'});
+  assert.equal(state.currentQuestion!.result,'correct');
+  assert.equal(state.currentQuestion!.resultWinnerId,'a');
+  state = close(state);
+  assert.equal(state.status,'bonus_roll');
+
+  state = answer(questionRoom(),'a','not an answer');
+  state = rejectReview(state);
+  assert.equal(state.currentQuestion!.phase,'stealing_open');
+  state = act(state,'b',{type:'buzz',turnId:state.turnId});
+  state = answer(state,'b','another unmatched synonym');
+  assert.equal(state.currentQuestion!.phase,'host_review');
+  state = act(state,'host',{type:'review',correct:true,turnId:state.turnId,phase:'host_review'});
+  assert.equal(state.currentQuestion!.resultWinnerId,'b');
+});
+test('unresolved host review times out as incorrect and cannot be resolved early by players', () => {
+  let state = answer(questionRoom(),'a','unmatched wording');
+  assert.equal(applyGameAction(state,'host',{type:'timeout',turnId:state.turnId,phase:'host_review'},ctx(114_999)).success,false);
+  state = act(state,'b',{type:'timeout',turnId:state.turnId,phase:'host_review'},115_000);
+  assert.equal(state.currentQuestion!.phase,'stealing_open');
 });
 test('leaving before active player preserves identity; active departure cancels pending bonus safely', () => {
   let state = act(room({currentPlayerIndex:1}),'a',{type:'leave'});
@@ -101,6 +131,7 @@ test('last-player departure returns to a joinable lobby; departed stealer ends t
   assert.equal(state.currentPlayerIndex,0);
   assert.equal(state.currentQuestion,null);
   state = answer(questionRoom(),'a','zzz');
+  state = rejectReview(state);
   state = act(state,'b',{type:'buzz',turnId:state.turnId});
   state = act(state,'b',{type:'leave'});
   assert.equal(state.currentQuestion!.phase,'showing_result');
@@ -126,6 +157,7 @@ test('normal/bonus/steal victories cross the finish line once for all dice bound
     assert.equal(state.players[0].position,((position+dice-1)%24)+1);
     assert.equal(state.status,position+dice>24?'finished':'bonus_roll');
     let steal = answer(target,'a','zzz');
+    steal = rejectReview(steal);
     steal = act(steal,'b',{type:'buzz',turnId:steal.turnId});
     steal = close(answer(steal,'b'));
     assert.equal(steal.status,position+dice>24?'finished':'playing');

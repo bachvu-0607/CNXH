@@ -21,6 +21,7 @@ interface QuestionModalProps {
   myPlayerId: string;
   isHost: boolean;
   onAnswerSubmit: (answerText: string) => Promise<{ success: boolean; message?: string }>;
+  onReviewAnswer: (correct: boolean) => Promise<{ success: boolean; message?: string }>;
   onCloseQuestion: () => Promise<{ success: boolean; message?: string }>;
   onUseHint: () => Promise<{ success: boolean; message?: string }>;
   onBuzz: () => Promise<{ success: boolean; message?: string }>;
@@ -33,6 +34,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   myPlayerId,
   isHost,
   onAnswerSubmit,
+  onReviewAnswer,
   onCloseQuestion,
   onUseHint,
   onBuzz,
@@ -70,7 +72,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
       const start = phase === 'active_answering' ? currentQuestion.questionStartTime
         : phase === 'stealer_answering' || phase === 'stealing_open' ? currentQuestion.stealStartTime
         : currentQuestion.phaseStartedAt;
-      const duration = phase === 'active_answering' ? 60 : phase === 'stealer_answering' ? 30 : phase === 'stealing_open' ? 12 : 3;
+      const duration = phase === 'active_answering' ? 60 : phase === 'stealer_answering' ? 30 : phase === 'stealing_open' ? 12 : phase === 'host_review' ? 15 : 3;
       const remaining = Math.max(0, Math.ceil(duration - (Date.now() - (start ?? mountedAt)) / 1000));
       setTimerRemaining(remaining);
       setResultCountdown(remaining);
@@ -184,6 +186,17 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
               }`}>
                 <Clock className="w-3.5 h-3.5" />
                 <span>{timerRemaining}s</span>
+              </div>
+            </div>
+          )}
+
+          {currentQuestion.phase === 'host_review' && (
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs">
+              <span className="text-amber-950 font-semibold">
+                {isHost ? 'Kiểm tra câu trả lời trước khi xử lý tiếp' : 'Quản trò đang kiểm tra câu trả lời'}
+              </span>
+              <div className="flex items-center gap-1 font-mono font-bold text-amber-900">
+                <Clock className="w-3.5 h-3.5" /> {timerRemaining}s
               </div>
             </div>
           )}
@@ -329,6 +342,44 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                   <Send className="w-3.5 h-3.5" /> Gửi
                 </button>
               </form>
+            </div>
+          )}
+
+          {currentQuestion.phase === 'host_review' && (
+            <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 space-y-3 animate-fade-in">
+              <div>
+                <span className="text-[10px] font-bold text-amber-800 uppercase">Câu trả lời cần xác nhận</span>
+                <p className="mt-1 text-sm font-semibold text-stone-900">“{currentQuestion.playerAnswer || '(Trống)'}”</p>
+              </div>
+              {isHost ? (
+                <>
+                  <div className="p-2.5 bg-white rounded-lg border border-stone-200">
+                    <span className="text-[10px] font-semibold uppercase text-emerald-800">Đáp án chuẩn tham khảo</span>
+                    <p className="text-xs font-semibold text-emerald-950 font-mono">{currentQuestion.officialAnswer}</p>
+                  </div>
+                  <p className="text-[11px] text-stone-600">Nếu câu trả lời là từ đồng nghĩa hoặc diễn đạt tương đương, hãy chấp nhận là đúng.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => void runAction(() => onReviewAnswer(true))}
+                      className="py-2.5 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Chấp nhận đúng
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => void runAction(() => onReviewAnswer(false))}
+                      className="py-2.5 px-3 rounded-lg bg-stone-600 hover:bg-stone-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <XCircle className="w-4 h-4" /> Chưa đúng
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-amber-900">Quản trò có 15 giây để xác nhận. Nếu không kịp, câu trả lời sẽ được tính là chưa đúng.</p>
+              )}
             </div>
           )}
 

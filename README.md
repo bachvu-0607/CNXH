@@ -33,4 +33,4 @@ Push Git không tự triển khai Firestore rules. Cần cập nhật cả front
 
 Quản trò có thể mở câu hỏi thay người chơi và dùng nút **Bỏ qua lượt** nếu người chơi đóng tab trước khi tung xúc xắc. Khi đang trả lời, bất kỳ thành viên còn kết nối nào cũng tự xử lý hết giờ. Nếu tất cả đóng tab, việc xử lý tiếp tục khi một thành viên quay lại.
 
-Bộ chấm chấp nhận các đáp án được khai báo trong bộ câu hỏi, viết không dấu, các viết tắt thông dụng và hoán vị đủ các ý của một danh sách. Bộ chấm không còn công nhận chuỗi con hoặc vài từ rời rạc. Các câu trả lời khác cách diễn đạt cần được bổ sung vào `acceptedAnswers`.
+Bộ chấm chấp nhận các đáp án được khai báo trong bộ câu hỏi, viết không dấu, các viết tắt thông dụng và hoán vị đủ các ý của một danh sách. Nếu câu trả lời không khớp tự động, quản trò có 15 giây để xem và xác nhận đúng/sai; khi quản trò từ chối câu trả lời của người chơi chính, cửa sổ cướp quyền mới mở. Nếu không có xác nhận trong 15 giây, đáp án được tính là sai.

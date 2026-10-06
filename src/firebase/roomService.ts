@@ -57,6 +57,8 @@ export const finishBonusRoll = (code: string, turnId: string) => dispatchRoomAct
 export const skipTurn = (code: string, turnId: string) => dispatchRoomAction(code, { type: 'skip', turnId });
 export const submitPlayerAnswer = (code: string, answer: string, id: string, turnId: string, phase: QuestionPhase) =>
   dispatchRoomAction(code, { type: 'answer', answer, turnId, phase }, id);
+export const reviewPlayerAnswer = (code: string, id: string, turnId: string, correct: boolean) =>
+  dispatchRoomAction(code, { type: 'review', correct, turnId, phase: 'host_review' }, id);
 export const closeQuestionAndAdvance = (code: string, turnId: string, phase: QuestionPhase) =>
   dispatchRoomAction(code, { type: 'close', turnId, phase });
 export const usePlayerHint = (code: string, id: string, turnId: string) => dispatchRoomAction(code, { type: 'hint', turnId }, id);
@@ -65,6 +67,8 @@ export const handleMainPlayerTimeout = (code: string, turnId: string) =>
   dispatchRoomAction(code, { type: 'timeout', turnId, phase: 'active_answering' });
 export const handleStealTimeout = (code: string, turnId: string) =>
   dispatchRoomAction(code, { type: 'timeout', turnId, phase: 'stealer_answering' });
+export const handleHostReviewTimeout = (code: string, turnId: string) =>
+  dispatchRoomAction(code, { type: 'timeout', turnId, phase: 'host_review' });
 
 export function subscribeToRoom(code: string, onUpdate: (room: RoomState | null) => void,
   onError: (message: string) => void): Unsubscribe {

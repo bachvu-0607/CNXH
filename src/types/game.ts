@@ -47,6 +47,7 @@ export type QuestionPhase =
   | 'active_answering'    // Main player is answering
   | 'stealing_open'       // Main player failed, buzzing is open for opponents
   | 'stealer_answering'   // An opponent buzzed in, has 30s to answer
+  | 'host_review'         // Host checks an answer rejected by automatic matching
   | 'showing_result'      // Evaluating result display before auto-closing
   | 'resolved';           // Question finished
 

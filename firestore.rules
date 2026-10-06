@@ -201,9 +201,40 @@ service cloud.firestore {
         && (timeout ? request.time.toMillis() >= deadline : actorId() == owner && request.time.toMillis() < deadline)
         && ((!timeout && q.result == 'correct') ?
           q.phase == 'showing_result' && q.resultWinnerId == owner && q.stealStartTime == old.stealStartTime
+          : !timeout && q.phase == 'host_review' ?
+            q.result == null && q.resultWinnerId == null && q.playerAnswer.size() > 0
+            && q.stealStartTime == old.stealStartTime
           : main && oldDoc.players.size() > 1 ?
             q.phase == 'stealing_open' && q.result == null && q.resultWinnerId == null && q.stealStartTime == q.phaseStartedAt
             : q.phase == 'showing_result' && q.result == 'incorrect' && q.resultWinnerId == null && q.stealStartTime == old.stealStartTime);
+    }
+    function reviewAnswer() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let old = oldDoc.currentQuestion;
+      let q = nextDoc.currentQuestion;
+      let owner = old.stolenByPlayerId == null ? old.activePlayerId : old.stolenByPlayerId;
+      return host() && oldDoc.status == 'question' && old.phase == 'host_review'
+        && questionOnly(['phase','phaseStartedAt','result','resultWinnerId','playerAnswer','stealStartTime'])
+        && q.playerAnswer == old.playerAnswer && nowish(q.phaseStartedAt)
+        && (q.result == 'correct' ?
+          q.phase == 'showing_result' && q.resultWinnerId == owner && q.stealStartTime == old.stealStartTime
+          : old.stolenByPlayerId == null && oldDoc.players.size() > 1 ?
+            q.phase == 'stealing_open' && q.result == null && q.resultWinnerId == null && q.stealStartTime == q.phaseStartedAt
+            : q.phase == 'showing_result' && q.result == 'incorrect' && q.resultWinnerId == null && q.stealStartTime == old.stealStartTime);
+    }
+    function reviewTimeout() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let old = oldDoc.currentQuestion;
+      let q = nextDoc.currentQuestion;
+      return oldDoc.status == 'question' && old.phase == 'host_review'
+        && request.time.toMillis() >= old.phaseStartedAt + 15000
+        && questionOnly(['phase','phaseStartedAt','result','resultWinnerId','playerAnswer','stealStartTime'])
+        && q.playerAnswer == old.playerAnswer && nowish(q.phaseStartedAt)
+        && (old.stolenByPlayerId == null && oldDoc.players.size() > 1 ?
+          q.phase == 'stealing_open' && q.result == null && q.resultWinnerId == null && q.stealStartTime == q.phaseStartedAt
+          : q.phase == 'showing_result' && q.result == 'incorrect' && q.resultWinnerId == null && q.stealStartTime == old.stealStartTime);
     }
     function buzz() {
       let nextDoc = request.resource.data;
@@ -294,7 +325,10 @@ service cloud.firestore {
         && next.lastAction.actorId == actorId() && validRoom(next)
         && (type == 'join' ? join() : member() && (
           type == 'ready' ? ready() : type in ['start','restart'] ? start() : type == 'leave' ? leave()
-          : type == 'roll' ? roll() : type == 'open' ? open() : type in ['answer','timeout'] ? answerOrTimeout()
+          : type == 'roll' ? roll() : type == 'open' ? open()
+          : type == 'answer' ? answerOrTimeout()
+          : type == 'review' ? reviewAnswer()
+          : type == 'timeout' ? (old.currentQuestion.phase == 'host_review' ? reviewTimeout() : answerOrTimeout())
           : type == 'buzz' ? buzz() : type == 'hint' ? hint() : type == 'close' ? close()
           : type == 'finish_bonus' ? finishBonus() : type == 'skip' ? skip() : false));
     }

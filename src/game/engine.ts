@@ -6,6 +6,7 @@ export const MAX_PLAYERS = 7;
 export const MAIN_ANSWER_MS = 60_000;
 export const STEAL_ANSWER_MS = 30_000;
 export const BUZZ_WINDOW_MS = 12_000;
+export const HOST_REVIEW_MS = 15_000;
 export const RESULT_MS = 3_000;
 export const PLAYER_COLORS = [
   { color: '#BE123C', name: 'Đỏ', avatar: '🔴' },
@@ -20,6 +21,7 @@ export const PLAYER_COLORS = [
 type TurnAction = { turnId: string } & (
   | { type: 'roll' | 'open' | 'finish_bonus' | 'buzz' | 'hint' | 'skip' }
   | { type: 'answer'; answer: string; phase: QuestionPhase }
+  | { type: 'review'; correct: boolean; phase: QuestionPhase }
   | { type: 'timeout' | 'close'; phase: QuestionPhase }
 );
 export type GameAction = TurnAction
@@ -225,9 +227,23 @@ export function applyGameAction(source: RoomState, actorId: string, action: Game
     if (correct) {
       // Apply movement once at settlement, for both normal and stolen answers.
       result(true, answer, owner);
-    } else if (main) failMain(answer);
-    else result(false, answer);
+    } else {
+      q.phase = 'host_review';
+      q.phaseStartedAt = now;
+      q.result = null;
+      q.resultWinnerId = null;
+      q.playerAnswer = answer;
+    }
     return success(correct);
+  }
+  if (action.type === 'review') {
+    if (!host || q.phase !== 'host_review') return reject('Chỉ quản trò mới có thể xác nhận đáp án.');
+    const owner = q.stolenByPlayerId || q.activePlayerId;
+    const answer = q.playerAnswer || '';
+    if (action.correct) result(true, answer, owner);
+    else if (owner === q.activePlayerId) failMain(answer);
+    else result(false, answer);
+    return success();
   }
   if (action.type === 'buzz') {
     if (!member || q.phase !== 'stealing_open' || actorId === q.activePlayerId || q.stolenByPlayerId ||
@@ -249,7 +265,11 @@ export function applyGameAction(source: RoomState, actorId: string, action: Game
     return success();
   }
   if (action.type === 'timeout') {
-    if (q.phase === 'active_answering' && q.questionStartTime != null && now >= q.questionStartTime + MAIN_ANSWER_MS) {
+    if (q.phase === 'host_review' && now >= q.phaseStartedAt + HOST_REVIEW_MS) {
+      const owner = q.stolenByPlayerId || q.activePlayerId;
+      if (owner === q.activePlayerId) failMain(q.playerAnswer || '');
+      else result(false, q.playerAnswer || '');
+    } else if (q.phase === 'active_answering' && q.questionStartTime != null && now >= q.questionStartTime + MAIN_ANSWER_MS) {
       failMain('(Hết thời gian 60s)');
     } else if (q.phase === 'stealer_answering' && q.stealStartTime != null && now >= q.stealStartTime + STEAL_ANSWER_MS) {
       result(false, '(Hết thời gian 30s)');

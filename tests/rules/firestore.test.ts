@@ -39,6 +39,10 @@ async function close() {
   const state=await read();
   return must('host',{type:'close',turnId:state.turnId,phase:state.currentQuestion!.phase});
 }
+async function review(correct:boolean) {
+  const state=await read();
+  return must('host',{type:'review',correct,turnId:state.turnId,phase:'host_review'});
+}
 
 test('guest creation, exact lookup, and all seven slots work; listing is denied',async()=>{
   await assertSucceeds(setDoc(ref('host'),{...room({status:'lobby',players:[]}),createdAt:serverTimestamp(),updatedAt:serverTimestamp(),lastAction:{type:'create',actorId:'host'}}));
@@ -93,6 +97,7 @@ test('normal answer, hint, bonus roll and two concurrent finish requests advance
 test('steal, incorrect response and main/stealer timeouts are permitted to all members at the correct deadline',async()=>{
   let state=await startQuestion();
   state=await answer('a','zzz');
+  state=await review(false);
   state=await must('b',{type:'buzz',turnId:state.turnId});
   state=await answer('b');
   state=await close();
@@ -110,6 +115,7 @@ test('stale-phase close, another sender and premature timeout writes fail even i
   let state=await startQuestion();
   await assertFails(updateDoc(ref('c'),{'currentQuestion.phase':'stealing_open','currentQuestion.phaseStartedAt':Date.now(),'currentQuestion.stealStartTime':Date.now(),updatedAt:serverTimestamp(),lastAction:{type:'timeout',actorId:'c'}}));
   state=await answer('a','zzz');
+  state=await review(false);
   state=await must('b',{type:'buzz',turnId:state.turnId});
   await assertFails(updateDoc(ref('a'),{'currentQuestion.phase':'showing_result','currentQuestion.result':'correct','currentQuestion.resultWinnerId':'a','currentQuestion.phaseStartedAt':Date.now(),updatedAt:serverTimestamp(),lastAction:{type:'answer',actorId:'a'}}));
   await assertFails(updateDoc(ref('host'),{status:'playing',currentQuestion:null,diceValue:null,targetPosition:null,currentPlayerIndex:1,turnId:'forged',updatedAt:serverTimestamp(),lastAction:{type:'close',actorId:'host'}}));
@@ -123,6 +129,7 @@ test('leaving before active player, during bonus and as stealer retains a playab
   assert.equal(state.status,'playing');
   state=await startQuestion();
   state=await answer('a','zzz');
+  state=await review(false);
   state=await must('b',{type:'buzz',turnId:state.turnId});
   state=await must('b',{type:'leave'});
   assert.equal(state.currentQuestion!.result,'incorrect');
@@ -141,7 +148,7 @@ test('normal and stolen answers plus bonus rolls can finish a lap with the corre
     } else {
       state=await must('a',{type:'roll',turnId:state.turnId});
       state=await must('a',{type:'open',turnId:state.turnId});
-      if(mode==='steal') { state=await answer('a','zzz'); state=await must('b',{type:'buzz',turnId:state.turnId}); }
+      if(mode==='steal') { state=await answer('a','zzz'); state=await review(false); state=await must('b',{type:'buzz',turnId:state.turnId}); }
       await answer(mode==='steal'?'b':'a');
       state=await close();
     }
@@ -152,10 +159,33 @@ test('normal and stolen answers plus bonus rolls can finish a lap with the corre
 test('unused buzz window can expire; host can recover an abandoned roll',async()=>{
   let state=await startQuestion();
   state=await answer('a','zzz');
+  state=await review(false);
   await seed({...state,currentQuestion:{...state.currentQuestion!,stealStartTime:Date.now()-13_000}});
   state=await must('c',{type:'close',turnId:state.turnId,phase:'stealing_open'});
   state=await must('host',{type:'skip',turnId:state.turnId});
   assert.equal(state.currentPlayerIndex,2);
+});
+
+test('host can approve an unmatched synonym and only the host can decide a review',async()=>{
+  let state=await startQuestion();
+  state=await answer('a','unmatched but acceptable wording');
+  assert.equal(state.currentQuestion!.phase,'host_review');
+  await assertFails(updateDoc(ref('a'),{
+    currentQuestion:{...state.currentQuestion,phase:'showing_result',phaseStartedAt:Date.now(),result:'correct',resultWinnerId:'a'},
+    updatedAt:serverTimestamp(),lastAction:{type:'review',actorId:'a'},
+  }));
+  state=await review(true);
+  assert.equal(state.currentQuestion!.result,'correct');
+  assert.equal(state.currentQuestion!.resultWinnerId,'a');
+  state=await close();
+  assert.equal(state.status,'bonus_roll');
+});
+test('unresolved host review can only time out after its deadline',async()=>{
+  let state=await startQuestion();
+  state=await answer('a','unmatched wording');
+  await seed({...state,currentQuestion:{...state.currentQuestion!,phaseStartedAt:Date.now()-16_000}});
+  state=await must('b',{type:'timeout',turnId:state.turnId,phase:'host_review'});
+  assert.equal(state.currentQuestion!.phase,'stealing_open');
 });
 
 test('all seven players can ready, move, use hints, answer, and restart with validated reset values',async()=>{

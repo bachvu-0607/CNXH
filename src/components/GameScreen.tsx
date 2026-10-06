@@ -5,7 +5,7 @@ import { Dice3D } from './Dice3D';
 import { PlayerSidebar } from './PlayerSidebar';
 import { QuestionModal } from './QuestionModal';
 import { BOARD_SQUARES, CATEGORY_CONFIG } from '../questions/boardData';
-import { MAIN_ANSWER_MS, STEAL_ANSWER_MS, BUZZ_WINDOW_MS, RESULT_MS } from '../game/engine';
+import { MAIN_ANSWER_MS, STEAL_ANSWER_MS, BUZZ_WINDOW_MS, HOST_REVIEW_MS, RESULT_MS } from '../game/engine';
 import { sounds } from '../utils/audio';
 import {
   submitPlayerAnswer,
@@ -14,6 +14,8 @@ import {
   buzzToStealQuestion,
   handleMainPlayerTimeout,
   handleStealTimeout,
+  handleHostReviewTimeout,
+  reviewPlayerAnswer,
   openQuestionModal,
   finishBonusRoll,
   skipTurn,
@@ -108,6 +110,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           action = () => handleMainPlayerTimeout(room.roomCode, turnId);
         if (q.phase === 'stealer_answering' && q.stealStartTime != null && now >= q.stealStartTime + STEAL_ANSWER_MS)
           action = () => handleStealTimeout(room.roomCode, turnId);
+        if (q.phase === 'host_review' && now >= q.phaseStartedAt + HOST_REVIEW_MS)
+          action = () => handleHostReviewTimeout(room.roomCode, turnId);
         if (q.phase === 'stealing_open' && now >= (q.stealStartTime ?? q.phaseStartedAt ?? mountedAt) + BUZZ_WINDOW_MS)
           action = () => closeQuestionAndAdvance(room.roomCode, turnId, 'stealing_open');
         if (q.phase === 'showing_result' && now >= (q.phaseStartedAt ?? mountedAt) + RESULT_MS)
@@ -426,6 +430,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           myPlayerId={myPlayerId}
           isHost={isHost}
           onAnswerSubmit={(text) => submitPlayerAnswer(room.roomCode, text, myPlayerId, turnId, room.currentQuestion!.phase)}
+          onReviewAnswer={(correct) => reviewPlayerAnswer(room.roomCode, myPlayerId, turnId, correct)}
           onCloseQuestion={() => closeQuestionAndAdvance(room.roomCode, turnId, room.currentQuestion!.phase)}
           onUseHint={() => usePlayerHint(room.roomCode, myPlayerId, turnId)}
           onBuzz={() => buzzToStealQuestion(room.roomCode, myPlayerId, turnId)}
