@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { sounds } from '../utils/audio';
 import {
   Compass,
   Play,
   Users,
   BookOpen,
-  Sparkles,
   ChevronRight,
   Crown,
-  Gamepad2,
+  Share2,
 } from 'lucide-react';
 
 interface HomeScreenProps {
@@ -17,6 +16,7 @@ interface HomeScreenProps {
   isCreating: boolean;
   isJoining: boolean;
   errorMessage?: string | null;
+  initialRoomCode?: string;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -25,14 +25,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   isCreating,
   isJoining,
   errorMessage,
+  initialRoomCode,
 }) => {
   const [playerName, setPlayerName] = useState(() => {
     return localStorage.getItem('boardgame_player_name') || '';
   });
-  const [roomCode, setRoomCode] = useState('');
-  const [hostIsPlayer, setHostIsPlayer] = useState(false); // Default: Host is classroom moderator/referee
+  const [roomCode, setRoomCode] = useState(initialRoomCode || '');
+  const [mode, setMode] = useState<'create' | 'join'>(initialRoomCode ? 'join' : 'create');
   const [showRules, setShowRules] = useState(false);
-  const [mode, setMode] = useState<'create' | 'join'>('create');
+
+  useEffect(() => {
+    if (initialRoomCode) {
+      setRoomCode(initialRoomCode);
+      setMode('join');
+    }
+  }, [initialRoomCode]);
 
   const handleNameChange = (val: string) => {
     setPlayerName(val);
@@ -42,17 +49,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!playerName.trim()) {
-      alert('Vui lòng nhập tên của bạn');
+      alert('Vui lòng nhập tên của Quản trò');
       return;
     }
     sounds.playClick();
-    onCreateRoom(playerName.trim(), hostIsPlayer);
+    onCreateRoom(playerName.trim(), false);
   };
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!playerName.trim()) {
-      alert('Vui lòng nhập tên của bạn / tên đội');
+      alert('Vui lòng nhập tên người chơi / tên đội của bạn');
       return;
     }
     if (!roomCode.trim()) {
@@ -64,8 +71,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col items-center justify-center p-4">
-      {/* Container */}
+    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col items-center justify-center p-4 select-none">
       <div className="w-full max-w-xl bg-white rounded-3xl shadow-xl border border-slate-200 p-6 sm:p-8 relative overflow-hidden">
         
         {/* Academic Header */}
@@ -88,6 +94,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </p>
         </div>
 
+        {/* Invited Link Banner if joining with code */}
+        {initialRoomCode && mode === 'join' && (
+          <div className="mb-4 p-3 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs sm:text-sm font-bold flex items-center gap-2">
+            <Share2 className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span>
+              Bạn được mời tham gia phòng <span className="font-black text-indigo-700">{initialRoomCode}</span>! Nhập tên để vào thi đấu.
+            </span>
+          </div>
+        )}
+
         {/* Error Notification */}
         {errorMessage && (
           <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm font-bold text-center animate-shake">
@@ -95,7 +111,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         )}
 
-        {/* Tab Switcher: Tạo phòng / Vào phòng */}
+        {/* Tab Switcher */}
         <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-2xl mb-5 border border-slate-200">
           <button
             type="button"
@@ -109,7 +125,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Sparkles className="w-4 h-4 text-amber-400" /> Tạo Phòng (Host)
+            <Crown className="w-4 h-4 text-amber-400" /> Tạo Phòng (Quản Trò)
           </button>
           <button
             type="button"
@@ -131,7 +147,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <div className="relative z-10 space-y-4">
           <div>
             <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
-              👤 {mode === 'create' ? 'Tên Quản Trò (Thầy/Cô/MC):' : 'Tên Đội Chơi / Người Chơi:'}
+              👤 {mode === 'create' ? 'Tên Quản Trò (Thầy/Cô/MC điều phối):' : 'Tên Người Chơi / Tên Đội Thi Đấu:'}
             </label>
             <input
               type="text"
@@ -145,48 +161,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           {mode === 'create' ? (
             <form onSubmit={handleCreate} className="space-y-4 pt-1">
-              {/* Host role picker */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-600">
-                  Vai trò của Host khi tạo phòng:
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setHostIsPlayer(false)}
-                    className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
-                      !hostIsPlayer
-                        ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 font-extrabold shadow-xs'
-                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <Crown className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Quản trò / Trọng tài</span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 font-normal mt-0.5">
-                      Chỉ điều phối và chấm điểm trên máy chiếu (Khuyên dùng)
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setHostIsPlayer(true)}
-                    className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
-                      hostIsPlayer
-                        ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 font-extrabold shadow-xs'
-                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <Gamepad2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span>Host cùng chơi</span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 font-normal mt-0.5">
-                      Host vừa điều phối vừa sở hữu 1 quân cờ thi đấu
-                    </p>
-                  </button>
-                </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600">
+                📌 <strong>Quy trình Quản trò (Host)</strong>: Quản trò tạo phòng, chia sẻ link/mã phòng cho tối đa 4 đội. Khi người chơi sẵn sàng, Quản trò bấm Bắt đầu, theo dõi câu trả lời và chấm đúng/sai.
               </div>
 
               <button
@@ -269,36 +245,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </h3>
                 <button
                   onClick={() => setShowRules(false)}
-                  className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold"
+                  className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold cursor-pointer"
                 >
                   Đóng
                 </button>
               </div>
 
               <div className="space-y-3 text-xs sm:text-sm text-slate-700 leading-relaxed">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <p className="font-extrabold text-slate-900 mb-1">🎯 1. Mục tiêu & Thành phần:</p>
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
+                  <p className="font-extrabold text-amber-950 mb-1">🏁 1. Mục tiêu & Thắng cuộc:</p>
                   <p>
-                    Củng cố kiến thức về Dân chủ, quá trình phát triển dân chủ, nền dân chủ XHCN và 3 phương diện bản chất (Chính trị, Kinh tế, Tư tưởng - Văn hóa - Xã hội). Bàn cờ gồm 24 ô.
+                    Tối đa 4 người/đội chơi lần lượt. <strong>Không tính điểm</strong>. Người đầu tiên đi đủ 1 vòng bàn cờ và vượt/về ô BẮT ĐẦU sẽ chiến thắng ngay lập tức!
                   </p>
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <p className="font-extrabold text-slate-900 mb-1">🎲 2. Cách chơi theo lượt:</p>
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
+                  <p className="font-extrabold text-blue-950 mb-1">🎲 2. Lượt chơi & Tung thưởng:</p>
                   <ul className="list-disc pl-4 space-y-1">
-                    <li>Đến lượt: đội chơi nhấn <strong>🎲 TUNG XÚC XẮC</strong> (1-6).</li>
-                    <li>Quân cờ di chuyển từng bước đến ô tương ứng.</li>
-                    <li>Hệ thống mở câu hỏi thuộc đúng ô đang đứng.</li>
-                    <li>Quản trò (Host) kiểm tra câu trả lời và chấm điểm.</li>
+                    <li>Người chơi chính tung xúc xắc (ưu tiên 2–3). Chưa đi quân ngay.</li>
+                    <li>Hệ thống tính ô đích và chọn ngẫu nhiên 1 trong 4 câu hỏi của ô đó.</li>
+                    <li>
+                      <strong>Đúng:</strong> Đi số ô đã tung + <strong>Được tặng 1 lần tung xúc xắc thưởng</strong> (ưu tiên ra 5–6, di chuyển luôn không cần trả lời câu hỏi) → Hết lượt.
+                    </li>
                   </ul>
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <p className="font-extrabold text-slate-900 mb-1">⭐ 3. Điểm số & Kết thúc:</p>
+                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200">
+                  <p className="font-extrabold text-rose-950 mb-1">⚡ 3. Cơ chế Cướp câu hỏi (Khi trả lời sai):</p>
                   <ul className="list-disc pl-4 space-y-1">
-                    <li>Ô thông thường: +1 điểm.</li>
-                    <li>Ô Tình huống (Màu tím): +2 điểm.</li>
-                    <li>Khi có đội đầu tiên hoàn thành 1 vòng bàn cờ, trò chơi kết thúc. Đội nhiều điểm nhất chiến thắng!</li>
+                    <li>Người chính không được đi. Câu hỏi mở cho tất cả đối thủ còn lại.</li>
+                    <li>Ai bấm <strong>BẤM ĐỂ TRẢ LỜI</strong> nhanh nhất có 10 giây để trả lời.</li>
+                    <li>Nếu đối thủ trả lời đúng: Được di chuyển bằng đúng số xúc xắc ban đầu của người chính! (Không có lượt tung thưởng).</li>
+                    <li>Nếu sai hoặc hết 10 giây: Bị loại khỏi câu này, mở lại cơ hội bấm cho các đối thủ còn lại.</li>
                   </ul>
                 </div>
               </div>

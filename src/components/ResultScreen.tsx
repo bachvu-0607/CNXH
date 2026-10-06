@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { RoomState } from '../types/game';
 import { sounds } from '../utils/audio';
 import confetti from 'canvas-confetti';
-import { Trophy, RotateCcw, Home, Sparkles, Medal } from 'lucide-react';
+import { Trophy, RotateCcw, Home, Sparkles, Medal, Flag } from 'lucide-react';
 
 interface ResultScreenProps {
   room: RoomState;
@@ -20,8 +20,18 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
   isRestarting,
 }) => {
   const isHost = room.hostId === myPlayerId;
-  const sortedPlayers = [...room.players].sort((a, b) => b.score - a.score);
-  const winner = room.winner || sortedPlayers[0];
+  const winner =
+    room.winner ||
+    room.players.find((p) => p.completedLap) ||
+    room.players[0];
+
+  const sortedPlayers = [...room.players].sort((a, b) => {
+    if (a.id === winner?.id) return -1;
+    if (b.id === winner?.id) return 1;
+    if (a.completedLap && !b.completedLap) return -1;
+    if (!a.completedLap && b.completedLap) return 1;
+    return (b.position || 0) - (a.position || 0);
+  });
 
   useEffect(() => {
     sounds.playVictory();
@@ -78,36 +88,36 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col items-center justify-center p-4 select-none">
       <div className="w-full max-w-xl bg-white rounded-3xl shadow-xl border border-slate-200 p-6 sm:p-8 relative overflow-hidden">
         
-        {/* Academic Victory Header */}
+        {/* Victory Header */}
         <div className="text-center space-y-2 mb-6">
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 bg-slate-900 text-amber-300 rounded-full font-bold text-xs uppercase shadow-xs">
             <Sparkles className="w-3.5 h-3.5" /> KẾT THÚC VÁN ĐẤU
           </div>
 
           <h1 className="font-['Playfair_Display',serif] text-2xl sm:text-3xl font-black text-slate-900">
-            KẾT QUẢ CHUNG CUỘC
+            VINH DANH NGƯỜI CHIẾN THẮNG
           </h1>
 
           <p className="text-xs sm:text-sm font-semibold text-slate-500">
-            Hành trình dân chủ đã hoàn thành xuất sắc!
+            Hành trình dân chủ đã tìm ra người đầu tiên hoàn thành xuất sắc vòng bàn cờ!
           </p>
         </div>
 
         {/* Winner Card */}
         {winner && (
           <div className="p-5 rounded-2xl bg-slate-900 text-white text-center shadow-md border border-slate-700 mb-6 relative">
-            <Trophy className="w-10 h-10 text-amber-400 mx-auto mb-2 drop-shadow animate-bounce" />
+            <Trophy className="w-12 h-12 text-amber-400 mx-auto mb-2 drop-shadow animate-bounce" />
             <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
               👑 ĐỘI QUÁN QUÂN
             </span>
             <h2 className="font-['Playfair_Display',serif] text-2xl sm:text-3xl font-black text-white mt-0.5">
               {winner.name}
             </h2>
-            <div className="inline-block px-3.5 py-1 rounded-full bg-slate-800 font-extrabold text-sm text-amber-300 mt-2 border border-slate-700">
-              ⭐ Tổng điểm: {winner.score} điểm
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-slate-800 font-extrabold text-xs sm:text-sm text-emerald-400 mt-2 border border-slate-700">
+              <Flag className="w-4 h-4" /> Đã hoàn thành 1 vòng và về đích!
             </div>
           </div>
         )}
@@ -115,7 +125,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
         {/* Leaderboard Table */}
         <div className="space-y-2.5 mb-6">
           <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-            <Medal className="w-4 h-4 text-amber-600" /> BẢNG XẾP HẠNG CÁC ĐỘI
+            <Medal className="w-4 h-4 text-amber-600" /> THỨ HẠNG CÁC ĐỘI
           </h3>
 
           <div className="space-y-2">
@@ -140,14 +150,16 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
                   <div>
                     <p className="text-xs sm:text-sm font-extrabold text-slate-900">{player.name}</p>
                     <p className="text-[10px] text-slate-500 font-medium">
-                      {player.completedLap ? 'Đã hoàn thành vòng' : `Vị trí: Ô ${player.position}`}
+                      {player.id === winner?.id
+                        ? 'Đã hoàn thành 1 vòng bàn cờ'
+                        : `Vị trí dừng: Ô ${player.position}/24`}
                     </p>
                   </div>
                 </div>
 
                 <div className="text-right">
                   <span className="text-xs sm:text-sm font-black px-2.5 py-1 rounded-lg bg-slate-100 text-slate-900 border border-slate-200">
-                    ⭐ {player.score} điểm
+                    Ô {player.position}/24
                   </span>
                 </div>
               </div>

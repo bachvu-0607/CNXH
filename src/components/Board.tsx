@@ -82,7 +82,7 @@ export const Board: React.FC<BoardProps> = ({
 
   return (
     <div className="relative w-full max-w-[850px] aspect-square mx-auto p-2 select-none">
-      {/* Refined Academic Board Frame (Navy Slate & Crisp Platinum) */}
+      {/* Board Frame */}
       <div className="relative w-full h-full rounded-2xl sm:rounded-3xl p-2 sm:p-2.5 bg-slate-900 border-4 sm:border-8 border-slate-800 shadow-2xl grid grid-cols-7 grid-rows-7 gap-1 sm:gap-1.5">
         
         {/* 24 Perimeter Squares */}
@@ -114,7 +114,7 @@ export const Board: React.FC<BoardProps> = ({
                     isStart ? 'bg-amber-400 text-slate-950' : 'bg-white/90 ' + config.textColor
                   }`}
                 >
-                  {isStart ? '⭐' : `Ô ${square.id}`}
+                  {isStart ? '⭐ BẮT ĐẦU' : `Ô ${square.id}`}
                 </span>
                 <span className="opacity-90">{getSquareIcon(square.category, square.id)}</span>
               </div>
@@ -128,11 +128,6 @@ export const Board: React.FC<BoardProps> = ({
                 >
                   {square.name}
                 </p>
-                {square.category === 'scenario' && (
-                  <span className="block text-[8px] sm:text-[9px] text-center font-extrabold text-purple-700 mt-0.5">
-                    +2 ĐIỂM
-                  </span>
-                )}
               </div>
 
               {/* Pawns Container */}
@@ -142,7 +137,7 @@ export const Board: React.FC<BoardProps> = ({
                   return (
                     <div
                       key={p.id}
-                      title={`${p.name} (${p.score}đ)`}
+                      title={`${p.name} (Vị trí: Ô ${p.position})`}
                       style={{
                         backgroundColor: p.color,
                         transform: `translate(${pIdx * 2}px, 0)`,
@@ -211,7 +206,7 @@ export const Board: React.FC<BoardProps> = ({
             </div>
             <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-purple-50 text-purple-950 border border-purple-200 font-semibold justify-center">
               <span className="w-2 h-2 rounded-full bg-purple-600"></span>
-              Tím: Tình huống (+2đ)
+              Tím: Tình huống
             </div>
           </div>
 
@@ -237,7 +232,7 @@ export const Board: React.FC<BoardProps> = ({
                 </div>
                 <div className="text-right">
                   <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-black px-2 py-0.5 rounded-lg bg-slate-100 text-slate-900 border border-slate-300">
-                    ⭐ {players[currentPlayerIndex].score} điểm
+                    Ô {players[currentPlayerIndex].position}/24
                   </span>
                 </div>
               </div>

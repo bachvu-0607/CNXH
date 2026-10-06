@@ -11,7 +11,10 @@ export interface Question {
   id: string;
   text: string;
   answer: string;
-  points: number;
+  hint?: string;
+  acceptedAnswers?: string[];
+  explanation?: string;
+  points?: number;
 }
 
 export interface BoardSquare {
@@ -30,13 +33,20 @@ export interface Player {
   colorName: string;
   avatar: string;
   position: number; // 1 - 24
-  score: number;
+  hintsRemaining: number; // Max 2 hint uses per game
+  score?: number;
   isReady?: boolean;
   connected: boolean;
   completedLap: boolean;
   laps: number;
   joinedAt?: number;
 }
+
+export type QuestionPhase =
+  | 'active_answering'    // Main player is answering
+  | 'stealing_open'       // Main player failed, buzzing is open for opponents
+  | 'stealer_answering'   // An opponent buzzed in, has 10s to answer
+  | 'resolved';           // Question finished
 
 export interface CurrentQuestionState {
   squareId: number;
@@ -45,11 +55,17 @@ export interface CurrentQuestionState {
   officialAnswer: string;
   category: CategoryType;
   squareName: string;
-  points: number;
+  phase: QuestionPhase;
+  activePlayerId: string;
+  originalDiceValue: number;
+  targetPosition: number;
+  stolenByPlayerId?: string | null;
+  stealStartTime?: number | null; // timestamp for 10s countdown
+  disqualifiedPlayerIds: string[]; // Opponents who failed steal
   playerAnswer?: string;
-  status: 'pending' | 'submitted' | 'resolved';
   result?: 'correct' | 'incorrect' | null;
-  awardedPoints?: number;
+  hint?: string;
+  hintUsedByPlayerIds?: string[]; // players who used a hint on this question
 }
 
 export interface RoomState {
@@ -57,25 +73,21 @@ export interface RoomState {
   hostId: string;
   hostName: string;
   hostIsPlayer: boolean;
-  status: 'lobby' | 'playing' | 'rolling' | 'moving' | 'evaluating' | 'finished';
+  status: 'lobby' | 'playing' | 'question' | 'bonus_roll' | 'moving' | 'finished';
   players: Player[];
   currentPlayerIndex: number;
   diceValue: number | null;
+  isBonusRoll: boolean; // whether current roll is bonus roll
+  bonusPlayerId?: string | null;
   targetPosition?: number | null;
   currentQuestion: CurrentQuestionState | null;
   usedQuestionKeys: string[];
   winner: {
     id: string;
     name: string;
-    score: number;
     avatar?: string;
     color?: string;
-  } | null;
-  isTieBreak?: boolean;
-  tieBreakQuestion?: {
-    text: string;
-    answer: string;
-    tiedPlayerIds: string[];
+    laps?: number;
   } | null;
   createdAt: any;
   updatedAt: any;

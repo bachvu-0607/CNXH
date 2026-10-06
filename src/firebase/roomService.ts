@@ -11,7 +11,8 @@ import {
 import { db } from './config';
 import { handleFirestoreError, OperationType } from './error';
 import { RoomState, Player, CurrentQuestionState } from '../types/game';
-import { BOARD_SQUARES, TIE_BREAK_QUESTIONS } from '../questions/boardData';
+import { BOARD_SQUARES } from '../questions/boardData';
+import { generateMaskedHint } from '../utils/hintGenerator';
 
 export const PLAYER_COLORS = [
   { color: '#BE123C', name: 'Đỏ', avatar: '🔴' },
@@ -27,6 +28,28 @@ function generateRoomCode(): string {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+}
+
+// Normal Roll: 1: 15% | 2: 25% | 3: 25% | 4: 15% | 5: 10% | 6: 10%
+export function rollNormalDice(): number {
+  const r = Math.random();
+  if (r < 0.15) return 1;
+  if (r < 0.40) return 2;
+  if (r < 0.65) return 3;
+  if (r < 0.80) return 4;
+  if (r < 0.90) return 5;
+  return 6;
+}
+
+// Bonus Roll: 1: 7.5% | 2: 10% | 3: 10% | 4: 12.5% | 5: 30% | 6: 30%
+export function rollBonusDice(): number {
+  const r = Math.random();
+  if (r < 0.075) return 1;
+  if (r < 0.175) return 2;
+  if (r < 0.275) return 3;
+  if (r < 0.400) return 4;
+  if (r < 0.700) return 5;
+  return 6;
 }
 
 export async function testConnection(): Promise<boolean> {
@@ -59,7 +82,9 @@ export async function createRoom(
       colorName: PLAYER_COLORS[0].name,
       avatar: PLAYER_COLORS[0].avatar,
       position: 1,
+      hintsRemaining: 2, // Max 2 hint uses
       score: 0,
+      isReady: true,
       connected: true,
       completedLap: false,
       laps: 0,
@@ -76,12 +101,12 @@ export async function createRoom(
     players,
     currentPlayerIndex: 0,
     diceValue: null,
+    isBonusRoll: false,
+    bonusPlayerId: null,
     targetPosition: null,
     currentQuestion: null,
     usedQuestionKeys: [],
     winner: null,
-    isTieBreak: false,
-    tieBreakQuestion: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -114,12 +139,12 @@ export async function joinRoom(
     const existingPlayerIndex = room.players.findIndex((p) => p.id === playerId);
 
     if (existingPlayerIndex >= 0) {
-      // Reconnecting existing player
       const updatedPlayers = [...room.players];
       updatedPlayers[existingPlayerIndex] = {
         ...updatedPlayers[existingPlayerIndex],
         name: playerName.trim() || updatedPlayers[existingPlayerIndex].name,
         connected: true,
+        hintsRemaining: updatedPlayers[existingPlayerIndex].hintsRemaining ?? 2,
       };
 
       await updateDoc(roomRef, {
@@ -145,6 +170,7 @@ export async function joinRoom(
       colorName: colorConfig.name,
       avatar: colorConfig.avatar,
       position: 1,
+      hintsRemaining: 2, // Max 2 hint uses
       score: 0,
       isReady: false,
       connected: true,
@@ -237,6 +263,7 @@ export async function startGame(roomCode: string, hostId: string): Promise<void>
       ...p,
       position: 1,
       score: 0,
+      hintsRemaining: 2, // Reset to 2 hints per player
       completedLap: false,
       laps: 0,
     }));
@@ -246,12 +273,12 @@ export async function startGame(roomCode: string, hostId: string): Promise<void>
       players: resetPlayers,
       currentPlayerIndex: 0,
       diceValue: null,
+      isBonusRoll: false,
+      bonusPlayerId: null,
       targetPosition: null,
       currentQuestion: null,
       usedQuestionKeys: [],
       winner: null,
-      isTieBreak: false,
-      tieBreakQuestion: null,
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
@@ -259,6 +286,7 @@ export async function startGame(roomCode: string, hostId: string): Promise<void>
   }
 }
 
+// 1. Roll Dice (Normal or Bonus)
 export async function rollDice(roomCode: string, playerId: string): Promise<void> {
   const code = roomCode.trim().toUpperCase();
   const path = `rooms/${code}`;
@@ -270,42 +298,90 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
 
     const room = snap.data() as RoomState;
     const currentPlayer = room.players[room.currentPlayerIndex];
-
     if (!currentPlayer) return;
 
-    // Allow roll if caller is the active player OR if caller is the Host (Moderator can roll on behalf of active player in classroom)
-    const canRollThisTurn = currentPlayer.id === playerId || room.hostId === playerId;
-    if (!canRollThisTurn) {
-      console.warn('Chưa tới lượt của bạn.');
+    // CASE A: BONUS ROLL
+    if (room.status === 'bonus_roll' && room.isBonusRoll) {
+      if (room.bonusPlayerId !== playerId) return;
+
+      const diceValue = rollBonusDice();
+      const oldPosition = currentPlayer.position || 1;
+      let newPosition = oldPosition + diceValue;
+      let willCompleteLap = currentPlayer.completedLap;
+      let laps = currentPlayer.laps || 0;
+
+      if (newPosition > 24) {
+        newPosition = ((newPosition - 1) % 24) + 1;
+        willCompleteLap = true;
+        laps += 1;
+      }
+
+      const updatedPlayers = room.players.map((p) => {
+        if (p.id === currentPlayer.id) {
+          return {
+            ...p,
+            position: newPosition,
+            completedLap: willCompleteLap,
+            laps,
+          };
+        }
+        return p;
+      });
+
+      // If bonus roll crosses finish line -> WINNER!
+      if (willCompleteLap) {
+        await updateDoc(roomRef, {
+          status: 'finished',
+          diceValue,
+          isBonusRoll: false,
+          bonusPlayerId: null,
+          players: updatedPlayers,
+          winner: {
+            id: currentPlayer.id,
+            name: currentPlayer.name,
+            avatar: currentPlayer.avatar,
+            color: currentPlayer.color,
+            laps,
+          },
+          updatedAt: serverTimestamp(),
+        });
+        return;
+      }
+
+      // Bonus roll finished -> End turn, advance to next player
+      const nextPlayerIndex = (room.currentPlayerIndex + 1) % updatedPlayers.length;
+      await updateDoc(roomRef, {
+        status: 'playing',
+        diceValue,
+        isBonusRoll: false,
+        bonusPlayerId: null,
+        players: updatedPlayers,
+        currentPlayerIndex: nextPlayerIndex,
+        currentQuestion: null,
+        updatedAt: serverTimestamp(),
+      });
       return;
     }
 
-    if (room.status !== 'playing') {
-      return;
-    }
+    // CASE B: NORMAL ROLL
+    if (room.status !== 'playing') return;
+    if (currentPlayer.id !== playerId) return;
 
-    // Roll dice 1-6
-    const diceValue = Math.floor(Math.random() * 6) + 1;
+    const diceValue = rollNormalDice();
     const oldPosition = currentPlayer.position || 1;
-    let newPosition = oldPosition + diceValue;
-    let completedLap = currentPlayer.completedLap;
-    let laps = currentPlayer.laps || 0;
-
-    if (newPosition > 24) {
-      newPosition = ((newPosition - 1) % 24) + 1;
-      completedLap = true;
-      laps += 1;
+    let projectedTarget = oldPosition + diceValue;
+    if (projectedTarget > 24) {
+      projectedTarget = ((projectedTarget - 1) % 24) + 1;
     }
 
     // Determine question for target square
-    const targetSquare = BOARD_SQUARES.find((sq) => sq.id === newPosition) || BOARD_SQUARES[0];
+    const targetSquare = BOARD_SQUARES.find((sq) => sq.id === projectedTarget) || BOARD_SQUARES[0];
     const squareQuestions = targetSquare.questions;
 
-    // Filter available questions not used yet
     const usedKeys = new Set(room.usedQuestionKeys || []);
     let availableIndices = squareQuestions
       .map((_, idx) => idx)
-      .filter((idx) => !usedKeys.has(`${newPosition}_${idx}`));
+      .filter((idx) => !usedKeys.has(`${projectedTarget}_${idx}`));
 
     if (availableIndices.length === 0) {
       availableIndices = squareQuestions.map((_, idx) => idx);
@@ -314,7 +390,7 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
     const selectedQuestionIdx =
       availableIndices[Math.floor(Math.random() * availableIndices.length)];
     const chosenQuestion = squareQuestions[selectedQuestionIdx];
-    const newUsedKey = `${newPosition}_${selectedQuestionIdx}`;
+    const newUsedKey = `${projectedTarget}_${selectedQuestionIdx}`;
     const nextUsedQuestionKeys = Array.from(new Set([...(room.usedQuestionKeys || []), newUsedKey]));
 
     const questionState: CurrentQuestionState = {
@@ -324,16 +400,24 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
       officialAnswer: chosenQuestion.answer,
       category: targetSquare.category,
       squareName: targetSquare.name,
-      points: targetSquare.category === 'scenario' ? 2 : 1,
-      status: 'pending',
+      phase: 'active_answering',
+      activePlayerId: currentPlayer.id,
+      originalDiceValue: diceValue,
+      targetPosition: projectedTarget,
+      disqualifiedPlayerIds: [],
+      playerAnswer: '',
       result: null,
+      hint: chosenQuestion.hint || generateMaskedHint(chosenQuestion.answer),
+      hintUsedByPlayerIds: [],
     };
 
-    // First update status to rolling/moving
+    // Open question modal without moving pawn yet
     await updateDoc(roomRef, {
-      status: 'rolling',
+      status: 'question',
       diceValue,
-      targetPosition: newPosition,
+      isBonusRoll: false,
+      bonusPlayerId: null,
+      targetPosition: projectedTarget,
       currentQuestion: questionState,
       usedQuestionKeys: nextUsedQuestionKeys,
       updatedAt: serverTimestamp(),
@@ -343,43 +427,7 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
   }
 }
 
-export async function finishPawnMove(roomCode: string): Promise<void> {
-  const code = roomCode.trim().toUpperCase();
-  const path = `rooms/${code}`;
-
-  try {
-    const roomRef = doc(db, 'rooms', code);
-    const snap = await getDoc(roomRef);
-    if (!snap.exists()) return;
-
-    const room = snap.data() as RoomState;
-    if (room.status !== 'rolling' && room.status !== 'moving') return;
-
-    const targetPos = room.targetPosition ?? 1;
-    const updatedPlayers = room.players.map((p, idx) => {
-      if (idx === room.currentPlayerIndex) {
-        const oldPos = p.position || 1;
-        const willCompleteLap = p.completedLap || (oldPos > targetPos && room.diceValue !== null);
-        return {
-          ...p,
-          position: targetPos,
-          completedLap: willCompleteLap,
-          laps: willCompleteLap ? (p.laps || 0) + 1 : p.laps,
-        };
-      }
-      return p;
-    });
-
-    await updateDoc(roomRef, {
-      status: 'evaluating',
-      players: updatedPlayers,
-      updatedAt: serverTimestamp(),
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
-  }
-}
-
+// 2. Submit Player Answer (Main Player or Stealing Opponent)
 export async function submitPlayerAnswer(roomCode: string, answerText: string): Promise<void> {
   const code = roomCode.trim().toUpperCase();
   const path = `rooms/${code}`;
@@ -394,7 +442,6 @@ export async function submitPlayerAnswer(roomCode: string, answerText: string): 
 
     await updateDoc(roomRef, {
       'currentQuestion.playerAnswer': answerText,
-      'currentQuestion.status': 'submitted',
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
@@ -402,7 +449,54 @@ export async function submitPlayerAnswer(roomCode: string, answerText: string): 
   }
 }
 
-export async function evaluateAnswer(
+// 3. Player Uses a Hint (Max 2 per game per player)
+export async function usePlayerHint(roomCode: string, playerId: string): Promise<{ success: boolean; message?: string }> {
+  const code = roomCode.trim().toUpperCase();
+  const path = `rooms/${code}`;
+
+  try {
+    const roomRef = doc(db, 'rooms', code);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return { success: false, message: 'Phòng không tồn tại' };
+
+    const room = snap.data() as RoomState;
+    if (!room.currentQuestion) return { success: false, message: 'Không có câu hỏi đang hoạt động' };
+
+    const playerIndex = room.players.findIndex((p) => p.id === playerId);
+    if (playerIndex < 0) return { success: false, message: 'Người chơi không tồn tại' };
+
+    const player = room.players[playerIndex];
+    const hintsRemaining = player.hintsRemaining ?? 2;
+
+    if (hintsRemaining <= 0) {
+      return { success: false, message: 'Bạn đã dùng hết 2 lượt gợi ý của mình!' };
+    }
+
+    const updatedPlayers = [...room.players];
+    updatedPlayers[playerIndex] = {
+      ...player,
+      hintsRemaining: hintsRemaining - 1,
+    };
+
+    const hintUsedByPlayerIds = Array.from(
+      new Set([...(room.currentQuestion.hintUsedByPlayerIds || []), playerId])
+    );
+
+    await updateDoc(roomRef, {
+      players: updatedPlayers,
+      'currentQuestion.hintUsedByPlayerIds': hintUsedByPlayerIds,
+      updatedAt: serverTimestamp(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+    return { success: false };
+  }
+}
+
+// 4. Host evaluates Main Active Player
+export async function evaluateMainPlayer(
   roomCode: string,
   isCorrect: boolean,
   hostId: string
@@ -416,84 +510,94 @@ export async function evaluateAnswer(
     if (!snap.exists()) return;
 
     const room = snap.data() as RoomState;
-    if (room.hostId !== hostId) {
-      throw new Error('Chỉ Quản trò (Host) mới có quyền chấm điểm.');
-    }
-
+    if (room.hostId !== hostId) return;
     if (!room.currentQuestion) return;
 
-    const pointsToAdd = isCorrect ? room.currentQuestion.points : 0;
-    const activeIndex = room.currentPlayerIndex;
+    const activePlayer = room.players[room.currentPlayerIndex];
+    if (!activePlayer) return;
 
-    const updatedPlayers = room.players.map((p, idx) => {
-      if (idx === activeIndex) {
-        return {
-          ...p,
-          score: Math.max(0, (p.score || 0) + pointsToAdd),
-        };
+    // IF CORRECT: Main player moves -> Gets Bonus Roll!
+    if (isCorrect) {
+      const diceVal = room.currentQuestion.originalDiceValue;
+      const oldPos = activePlayer.position || 1;
+      let newPos = oldPos + diceVal;
+      let willCompleteLap = activePlayer.completedLap;
+      let laps = activePlayer.laps || 0;
+
+      if (newPos > 24) {
+        newPos = ((newPos - 1) % 24) + 1;
+        willCompleteLap = true;
+        laps += 1;
       }
-      return p;
-    });
 
-    // Check if anyone completed a lap to finish the game
-    const hasAnyPlayerCompletedLap = updatedPlayers.some((p) => p.completedLap || (p.laps && p.laps >= 1));
+      const updatedPlayers = room.players.map((p) => {
+        if (p.id === activePlayer.id) {
+          return {
+            ...p,
+            position: newPos,
+            completedLap: willCompleteLap,
+            laps,
+          };
+        }
+        return p;
+      });
 
-    if (hasAnyPlayerCompletedLap) {
-      const sortedByScore = [...updatedPlayers].sort((a, b) => b.score - a.score);
-      const highestScore = sortedByScore[0]?.score || 0;
-      const topPlayers = sortedByScore.filter((p) => p.score === highestScore);
-
-      if (topPlayers.length > 1 && updatedPlayers.length > 1) {
-        // Tie break
-        const randomTieQ =
-          TIE_BREAK_QUESTIONS[Math.floor(Math.random() * TIE_BREAK_QUESTIONS.length)];
+      // Win check
+      if (willCompleteLap) {
         await updateDoc(roomRef, {
-          players: updatedPlayers,
-          'currentQuestion.status': 'resolved',
-          'currentQuestion.result': isCorrect ? 'correct' : 'incorrect',
-          'currentQuestion.awardedPoints': pointsToAdd,
-          isTieBreak: true,
-          tieBreakQuestion: {
-            text: randomTieQ.text,
-            answer: randomTieQ.answer,
-            tiedPlayerIds: topPlayers.map((p) => p.id),
-          },
-          updatedAt: serverTimestamp(),
-        });
-        return;
-      } else {
-        const winner = sortedByScore[0];
-        await updateDoc(roomRef, {
-          players: updatedPlayers,
           status: 'finished',
-          'currentQuestion.status': 'resolved',
-          'currentQuestion.result': isCorrect ? 'correct' : 'incorrect',
-          'currentQuestion.awardedPoints': pointsToAdd,
+          players: updatedPlayers,
+          'currentQuestion.phase': 'resolved',
+          'currentQuestion.result': 'correct',
           winner: {
-            id: winner.id,
-            name: winner.name,
-            score: winner.score,
-            avatar: winner.avatar,
-            color: winner.color,
+            id: activePlayer.id,
+            name: activePlayer.name,
+            avatar: activePlayer.avatar,
+            color: activePlayer.color,
+            laps,
           },
           updatedAt: serverTimestamp(),
         });
         return;
       }
+
+      // Enter bonus roll state
+      await updateDoc(roomRef, {
+        status: 'bonus_roll',
+        players: updatedPlayers,
+        isBonusRoll: true,
+        bonusPlayerId: activePlayer.id,
+        'currentQuestion.phase': 'resolved',
+        'currentQuestion.result': 'correct',
+        updatedAt: serverTimestamp(),
+      });
+      return;
     }
 
-    // Next turn
-    const nextPlayerIndex = (activeIndex + 1) % updatedPlayers.length;
+    // IF INCORRECT: Main player does NOT move. Question opened for steal!
+    const otherPlayers = room.players.filter((p) => p.id !== activePlayer.id);
 
+    if (otherPlayers.length === 0) {
+      // No opponents available to steal -> Turn ends
+      const nextPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
+      await updateDoc(roomRef, {
+        status: 'playing',
+        currentPlayerIndex: nextPlayerIndex,
+        currentQuestion: null,
+        diceValue: null,
+        isBonusRoll: false,
+        updatedAt: serverTimestamp(),
+      });
+      return;
+    }
+
+    // Open stealing for opponents
     await updateDoc(roomRef, {
-      players: updatedPlayers,
-      status: 'playing',
-      currentPlayerIndex: nextPlayerIndex,
-      diceValue: null,
-      targetPosition: null,
-      'currentQuestion.status': 'resolved',
-      'currentQuestion.result': isCorrect ? 'correct' : 'incorrect',
-      'currentQuestion.awardedPoints': pointsToAdd,
+      'currentQuestion.phase': 'stealing_open',
+      'currentQuestion.disqualifiedPlayerIds': [activePlayer.id],
+      'currentQuestion.playerAnswer': '',
+      'currentQuestion.stolenByPlayerId': null,
+      'currentQuestion.stealStartTime': null,
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
@@ -501,9 +605,41 @@ export async function evaluateAnswer(
   }
 }
 
-export async function resolveTieBreakWinner(
+// 5. Opponent Buzzes to Steal ("BẤM ĐỂ TRẢ LỜI")
+export async function buzzToStealQuestion(roomCode: string, playerId: string): Promise<void> {
+  const code = roomCode.trim().toUpperCase();
+  const path = `rooms/${code}`;
+
+  try {
+    const roomRef = doc(db, 'rooms', code);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const room = snap.data() as RoomState;
+    if (!room.currentQuestion) return;
+    if (room.currentQuestion.phase !== 'stealing_open') return;
+
+    // Check if disqualified or main player
+    if (room.currentQuestion.disqualifiedPlayerIds?.includes(playerId)) return;
+    if (room.currentQuestion.activePlayerId === playerId) return;
+
+    // First buzz claims right to answer (10s timer)
+    await updateDoc(roomRef, {
+      'currentQuestion.phase': 'stealer_answering',
+      'currentQuestion.stolenByPlayerId': playerId,
+      'currentQuestion.stealStartTime': Date.now(),
+      'currentQuestion.playerAnswer': '',
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+// 6. Host evaluates Stealing Opponent (or 10s Timer Expired)
+export async function evaluateStealAnswer(
   roomCode: string,
-  winnerId: string,
+  isCorrect: boolean,
   hostId: string
 ): Promise<void> {
   const code = roomCode.trim().toUpperCase();
@@ -516,22 +652,104 @@ export async function resolveTieBreakWinner(
 
     const room = snap.data() as RoomState;
     if (room.hostId !== hostId) return;
+    if (!room.currentQuestion) return;
 
-    const winner = room.players.find((p) => p.id === winnerId);
-    if (!winner) return;
+    const stealerId = room.currentQuestion.stolenByPlayerId;
+    if (!stealerId) return;
 
-    await updateDoc(roomRef, {
-      status: 'finished',
-      isTieBreak: false,
-      winner: {
-        id: winner.id,
-        name: winner.name,
-        score: winner.score + 1,
-        avatar: winner.avatar,
-        color: winner.color,
-      },
-      updatedAt: serverTimestamp(),
-    });
+    const stealer = room.players.find((p) => p.id === stealerId);
+
+    // IF STEAL CORRECT: Stealer moves original diceValue steps (No bonus roll) -> Turn ends
+    if (isCorrect && stealer) {
+      const diceVal = room.currentQuestion.originalDiceValue;
+      const oldPos = stealer.position || 1;
+      let newPos = oldPos + diceVal;
+      let willCompleteLap = stealer.completedLap;
+      let laps = stealer.laps || 0;
+
+      if (newPos > 24) {
+        newPos = ((newPos - 1) % 24) + 1;
+        willCompleteLap = true;
+        laps += 1;
+      }
+
+      const updatedPlayers = room.players.map((p) => {
+        if (p.id === stealer.id) {
+          return {
+            ...p,
+            position: newPos,
+            completedLap: willCompleteLap,
+            laps,
+          };
+        }
+        return p;
+      });
+
+      // Win check for stealer
+      if (willCompleteLap) {
+        await updateDoc(roomRef, {
+          status: 'finished',
+          players: updatedPlayers,
+          'currentQuestion.phase': 'resolved',
+          'currentQuestion.result': 'correct',
+          winner: {
+            id: stealer.id,
+            name: stealer.name,
+            avatar: stealer.avatar,
+            color: stealer.color,
+            laps,
+          },
+          updatedAt: serverTimestamp(),
+        });
+        return;
+      }
+
+      // Stealer does NOT get bonus roll -> Advance to next player
+      const nextPlayerIndex = (room.currentPlayerIndex + 1) % updatedPlayers.length;
+      await updateDoc(roomRef, {
+        status: 'playing',
+        players: updatedPlayers,
+        currentPlayerIndex: nextPlayerIndex,
+        currentQuestion: null,
+        diceValue: null,
+        isBonusRoll: false,
+        updatedAt: serverTimestamp(),
+      });
+      return;
+    }
+
+    // IF STEAL INCORRECT OR TIMEOUT: Disqualify this stealer
+    const nextDisqualified = Array.from(
+      new Set([...(room.currentQuestion.disqualifiedPlayerIds || []), stealerId])
+    );
+
+    // Check if any opponents remain who haven't attempted steal
+    const eligibleOpponents = room.players.filter(
+      (p) => !nextDisqualified.includes(p.id) && p.id !== room.currentQuestion?.activePlayerId
+    );
+
+    if (eligibleOpponents.length > 0) {
+      // Re-open buzzing for remaining opponents!
+      await updateDoc(roomRef, {
+        'currentQuestion.phase': 'stealing_open',
+        'currentQuestion.disqualifiedPlayerIds': nextDisqualified,
+        'currentQuestion.stolenByPlayerId': null,
+        'currentQuestion.stealStartTime': null,
+        'currentQuestion.playerAnswer': '',
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      // All opponents failed or disqualified -> Nobody moves -> Turn ends
+      const nextPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
+      await updateDoc(roomRef, {
+        status: 'playing',
+        currentPlayerIndex: nextPlayerIndex,
+        currentQuestion: null,
+        diceValue: null,
+        isBonusRoll: false,
+        updatedAt: serverTimestamp(),
+      });
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
@@ -553,6 +771,7 @@ export async function restartGame(roomCode: string, hostId: string): Promise<voi
       ...p,
       position: 1,
       score: 0,
+      hintsRemaining: 2, // Reset hints
       completedLap: false,
       laps: 0,
     }));
@@ -562,12 +781,12 @@ export async function restartGame(roomCode: string, hostId: string): Promise<voi
       players: resetPlayers,
       currentPlayerIndex: 0,
       diceValue: null,
+      isBonusRoll: false,
+      bonusPlayerId: null,
       targetPosition: null,
       currentQuestion: null,
       usedQuestionKeys: [],
       winner: null,
-      isTieBreak: false,
-      tieBreakQuestion: null,
       updatedAt: serverTimestamp(),
     });
   } catch (error) {

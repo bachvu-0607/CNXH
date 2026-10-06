@@ -1,7 +1,7 @@
 import React from 'react';
 import { Player } from '../types/game';
 import { BOARD_SQUARES } from '../questions/boardData';
-import { Trophy, Compass, Flag, Shield, UserCheck, Crown } from 'lucide-react';
+import { Compass, Flag, Crown, Users, Lightbulb } from 'lucide-react';
 
 interface PlayerSidebarProps {
   players: Player[];
@@ -18,7 +18,6 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   hostName,
   myPlayerId,
 }) => {
-  const sortedByScore = [...players].sort((a, b) => b.score - a.score);
   const isMeHost = hostId === myPlayerId;
 
   const getSquareName = (pos: number) => {
@@ -52,14 +51,14 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
           </div>
         </div>
         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-          Trọng tài & Chấm điểm
+          Trọng tài
         </span>
       </div>
 
       {/* Header for Players list */}
       <div className="flex items-center justify-between pt-1 pb-2 border-b border-slate-200">
         <div className="flex items-center gap-1.5">
-          <Trophy className="w-4 h-4 text-amber-600" />
+          <Users className="w-4 h-4 text-indigo-600" />
           <h2 className="font-extrabold text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
             CÁC ĐỘI THI ĐẤU
           </h2>
@@ -79,7 +78,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
           players.map((player, idx) => {
             const isCurrentTurn = idx === currentPlayerIndex;
             const isMe = player.id === myPlayerId;
-            const rank = sortedByScore.findIndex((p) => p.id === player.id) + 1;
+            const hintsRemaining = player.hintsRemaining ?? 2;
 
             return (
               <div
@@ -111,9 +110,6 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                       className="relative w-8 h-8 rounded-full border-2 border-white shadow-xs flex items-center justify-center text-white font-black text-xs shrink-0"
                     >
                       {player.name.charAt(0).toUpperCase()}
-                      <span className="absolute -bottom-1 -right-1 text-[8px] bg-slate-900 text-white font-black px-1 rounded-full border border-white">
-                        #{rank}
-                      </span>
                     </div>
 
                     <div className="min-w-0">
@@ -130,21 +126,34 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
 
                       <div className="flex items-center gap-1 text-[10px] text-slate-500 font-semibold mt-0.5">
                         <Compass className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span className="truncate max-w-[150px]" title={getSquareName(player.position)}>
+                        <span className="truncate max-w-[130px]" title={getSquareName(player.position)}>
                           {player.position === 1 ? 'BẮT ĐẦU' : `Ô ${player.position}: ${getSquareName(player.position)}`}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 flex flex-col items-end gap-1">
                     <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-900 font-black text-xs border border-slate-200">
-                      ⭐ {player.score}đ
+                      Ô {player.position}/24
+                    </div>
+
+                    {/* Hints remaining quota */}
+                    <div
+                      className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                        hintsRemaining > 0
+                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                          : 'bg-slate-100 text-slate-400 border border-slate-200'
+                      }`}
+                      title={`Lượt gợi ý còn lại: ${hintsRemaining}/2`}
+                    >
+                      <Lightbulb className="w-2.5 h-2.5 text-amber-600" />
+                      {hintsRemaining}/2 gợi ý
                     </div>
 
                     {player.completedLap && (
-                      <div className="flex items-center justify-end gap-0.5 text-[9px] font-extrabold text-emerald-600 mt-0.5">
-                        <Flag className="w-2.5 h-2.5" /> 1 vòng
+                      <div className="flex items-center justify-end gap-0.5 text-[9px] font-extrabold text-emerald-600">
+                        <Flag className="w-2.5 h-2.5" /> Hoàn thành 1 vòng
                       </div>
                     )}
                   </div>
@@ -156,8 +165,8 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
       </div>
 
       {/* Classroom Guide footer */}
-      <div className="mt-1 pt-2 border-t border-slate-100 text-[10px] text-slate-500 text-center font-medium">
-        🎯 Đội hoàn thành 1 vòng trước sẽ kết thúc ván. Đội nhiều điểm nhất thắng cuộc!
+      <div className="mt-1 pt-2 border-t border-slate-100 text-[10px] text-slate-500 text-center font-medium leading-relaxed">
+        🏁 Người đầu tiên hoàn thành 1 vòng và vượt/về ô BẮT ĐẦU sẽ chiến thắng ngay lập tức!
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ function getOrCreateUserId(): string {
 export default function App() {
   const [userId, setUserId] = useState<string>(() => getOrCreateUserId());
   const [currentRoomCode, setCurrentRoomCode] = useState<string>('');
+  const [inviteRoomCode, setInviteRoomCode] = useState<string>('');
   const [room, setRoom] = useState<RoomState | null>(null);
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [isJoining, setIsJoining] = useState<boolean>(false);
@@ -28,7 +29,7 @@ export default function App() {
   const [isRestarting, setIsRestarting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Initialize auth
+  // Initialize auth & check invitation URL
   useEffect(() => {
     testConnection();
 
@@ -46,7 +47,9 @@ export default function App() {
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
     if (roomParam) {
-      setCurrentRoomCode(roomParam.toUpperCase());
+      const code = roomParam.trim().toUpperCase();
+      setInviteRoomCode(code);
+      setCurrentRoomCode(code);
     } else {
       const cachedRoom = localStorage.getItem('boardgame_current_room');
       if (cachedRoom) {
@@ -165,13 +168,17 @@ export default function App() {
     }
     setRoom(null);
     setCurrentRoomCode('');
+    setInviteRoomCode('');
     localStorage.removeItem('boardgame_current_room');
     const newUrl = window.location.pathname;
     window.history.pushState({ path: newUrl }, '', newUrl);
   };
 
-  // Render view depending on state
-  if (!room || !currentRoomCode) {
+  // Check if current user is actively in the room as Host or Player
+  const isUserMemberOfRoom = room && (room.hostId === userId || room.players.some((p) => p.id === userId));
+
+  // If not in room, show HomeScreen
+  if (!room || !currentRoomCode || !isUserMemberOfRoom) {
     return (
       <HomeScreen
         onCreateRoom={handleCreateRoom}
@@ -179,6 +186,7 @@ export default function App() {
         isCreating={isCreating}
         isJoining={isJoining}
         errorMessage={errorMessage}
+        initialRoomCode={inviteRoomCode || currentRoomCode}
       />
     );
   }
