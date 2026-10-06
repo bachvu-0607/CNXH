@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidRoom(data) {
+      return data.roomCode is string
+        && data.roomCode.size() <= 10
+        && data.hostId is string
+        && data.hostId.size() <= 128
+        && data.status is string
+        && data.status in ['lobby', 'playing', 'rolling', 'moving', 'evaluating', 'finished']
+        && data.players is list
+        && data.players.size() <= 4;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Game Rooms collection
+    match /rooms/{roomCode} {
+      allow read: if isValidId(roomCode);
+      allow create: if isValidId(roomCode) && isValidRoom(incoming());
+      allow update: if isValidId(roomCode) && isValidRoom(incoming());
+      allow delete: if isValidId(roomCode);
+    }
+  }
+}

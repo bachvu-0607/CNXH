@@ -1,0 +1,30 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "Multiplayer board game room state for Hành Trình Làm Chủ",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string", "maxLength": 10, "pattern": "^[A-Z0-9]+$" },
+        "hostId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["lobby", "playing", "rolling", "moving", "evaluating", "finished"] },
+        "currentPlayerIndex": { "type": "number" },
+        "diceValue": { "type": "number" },
+        "currentQuestion": { "type": "object" },
+        "usedQuestionKeys": { "type": "array" },
+        "players": { "type": "array" },
+        "winner": { "type": "object" },
+        "isTieBreak": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["roomCode", "hostId", "status", "players"]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomCode}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Game room document holding room configuration and real-time game state"
+    }
+  }
+}

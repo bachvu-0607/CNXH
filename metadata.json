@@ -1,0 +1,7 @@
+{
+  "name": "Hành Trình Làm Chủ",
+  "description": "Board game giáo dục trực tuyến nhiều người chơi về Dân chủ và Nền dân chủ Xã hội Chủ nghĩa",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
