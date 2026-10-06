@@ -5,6 +5,10 @@ import {
   Play,
   ChevronRight,
   Share2,
+  LogIn,
+  RotateCw,
+  ExternalLink,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface HomeScreenProps {
@@ -14,6 +18,11 @@ interface HomeScreenProps {
   isJoining: boolean;
   errorMessage: string | null;
   initialRoomCode?: string | null;
+  userId?: string;
+  authError?: string | null;
+  isAuthenticating?: boolean;
+  onGoogleSignIn?: () => void;
+  onRetryAnonymous?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -23,6 +32,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   isJoining,
   errorMessage,
   initialRoomCode,
+  userId,
+  authError,
+  isAuthenticating,
+  onGoogleSignIn,
+  onRetryAnonymous,
 }) => {
   const [playerName, setPlayerName] = useState(() => {
     return localStorage.getItem('boardgame_player_name') || '';
@@ -85,7 +99,65 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         )}
 
-        {/* Thông báo lỗi */}
+        {/* Thông báo lỗi xác thực hoặc hướng dẫn */}
+        {authError && !userId && (
+          <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-semibold text-amber-950">Chưa xác thực Firebase</div>
+                <p className="text-[11px] leading-relaxed text-amber-800">
+                  {authError}
+                </p>
+              </div>
+            </div>
+            
+            <div className="pt-1 flex flex-col sm:flex-row gap-2">
+              {onGoogleSignIn && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    sounds.playClick();
+                    onGoogleSignIn();
+                  }}
+                  disabled={isAuthenticating}
+                  className="flex-1 py-1.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  Đăng nhập với Google
+                </button>
+              )}
+              {onRetryAnonymous && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    sounds.playClick();
+                    onRetryAnonymous();
+                  }}
+                  disabled={isAuthenticating}
+                  className="py-1.5 px-3 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-medium text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <RotateCw className={`w-3.5 h-3.5 ${isAuthenticating ? 'animate-spin' : ''}`} />
+                  Thử lại
+                </button>
+              )}
+            </div>
+
+            <div className="text-[10px] text-amber-700 pt-0.5 flex items-center gap-1">
+              <span>Hoặc bật <strong>Anonymous</strong> trong:</span>
+              <a
+                href="https://console.firebase.google.com/project/gen-lang-client-0040421659/authentication/providers"
+                target="_blank"
+                rel="noreferrer"
+                className="underline font-semibold hover:text-amber-950 inline-flex items-center gap-0.5"
+              >
+                Firebase Console <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Thông báo lỗi thông thường */}
         {errorMessage && (
           <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium text-center">
             {errorMessage}
@@ -148,7 +220,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
               <button
                 type="submit"
-                disabled={isCreating || !playerName.trim()}
+                disabled={isCreating || !userId || !playerName.trim()}
                 className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm shadow-xs cursor-pointer transition-all flex items-center justify-center gap-2"
               >
                 {isCreating ? (
@@ -179,7 +251,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
               <button
                 type="submit"
-                disabled={isJoining || !playerName.trim() || !roomCode.trim()}
+                disabled={isJoining || !userId || !playerName.trim() || !roomCode.trim()}
                 className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm shadow-xs cursor-pointer transition-all flex items-center justify-center gap-1.5"
               >
                 {isJoining ? (

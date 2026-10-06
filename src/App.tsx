@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from './firebase/config';
 import { createRoom, joinRoom, subscribeToRoom, startGame, rollDice, restartGame, leaveRoom } from './firebase/roomService';
 import { RoomState } from './types/game';
@@ -18,6 +18,8 @@ export default function App() {
   const [isJoining, setIsJoining] = useState<boolean>(false);
   const [isStarting, setIsStarting] = useState<boolean>(false);
   const [isRestarting, setIsRestarting] = useState<boolean>(false);
+  const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Initialize auth & check invitation URL
@@ -25,10 +27,16 @@ export default function App() {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserId(user.uid);
+        setAuthError(null);
       } else {
         setUserId('');
-        signInAnonymously(auth).catch((err) => {
-          setErrorMessage('Không thể đăng nhập để chơi. Vui lòng tải lại trang và kiểm tra kết nối.');
+        signInAnonymously(auth).catch((err: any) => {
+          console.error('Firebase Anonymous Auth Error:', err);
+          if (err?.code === 'auth/admin-restricted-operation' || err?.code === 'auth/operation-not-allowed') {
+            setAuthError('Firebase Authentication chưa bật tính năng Anonymous (Ẩn danh). Bạn có thể Đăng nhập với Google để chơi ngay hoặc bật Anonymous trên Firebase Console.');
+          } else {
+            setAuthError('Không thể đăng nhập ẩn danh (' + (err?.message || 'Lỗi kết nối') + '). Vui lòng thử lại.');
+          }
         });
       }
     });
@@ -51,6 +59,39 @@ export default function App() {
 
     return () => unsubscribeAuth();
   }, []);
+
+  const handleGoogleSignIn = async () => {
+    setIsAuthenticating(true);
+    setErrorMessage(null);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      setAuthError(null);
+    } catch (err: any) {
+      console.error('Google Sign In Error:', err);
+      setErrorMessage('Đăng nhập Google không thành công: ' + (err?.message || 'Vui lòng thử lại.'));
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleRetryAnonymousAuth = async () => {
+    setIsAuthenticating(true);
+    setErrorMessage(null);
+    try {
+      await signInAnonymously(auth);
+      setAuthError(null);
+    } catch (err: any) {
+      console.error('Retry Anonymous Auth Error:', err);
+      if (err?.code === 'auth/admin-restricted-operation' || err?.code === 'auth/operation-not-allowed') {
+        setAuthError('Firebase Authentication chưa bật tính năng Anonymous (Ẩn danh). Vui lòng vào Firebase Console > Authentication > Sign-in method và bật Anonymous.');
+      } else {
+        setErrorMessage('Không thể đăng nhập ẩn danh: ' + (err?.message || 'Vui lòng thử lại.'));
+      }
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
 
   // Subscribe to real-time room changes
   useEffect(() => {
@@ -184,10 +225,15 @@ export default function App() {
       <HomeScreen
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
-        isCreating={isCreating || !userId}
-        isJoining={isJoining || !userId}
+        isCreating={isCreating}
+        isJoining={isJoining}
         errorMessage={errorMessage}
         initialRoomCode={inviteRoomCode || currentRoomCode}
+        userId={userId}
+        authError={authError}
+        isAuthenticating={isAuthenticating}
+        onGoogleSignIn={handleGoogleSignIn}
+        onRetryAnonymous={handleRetryAnonymousAuth}
       />
     );
   }
