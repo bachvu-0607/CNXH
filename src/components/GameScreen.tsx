@@ -8,9 +8,8 @@ import { BOARD_SQUARES, CATEGORY_CONFIG } from '../questions/boardData';
 import { sounds } from '../utils/audio';
 import {
   submitPlayerAnswer,
-  evaluateMainPlayer,
   buzzToStealQuestion,
-  evaluateStealAnswer,
+  handleStealTimeout,
   usePlayerHint,
 } from '../firebase/roomService';
 import {
@@ -41,6 +40,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
   const isHost = room.hostId === myPlayerId;
   const activePlayer = room.players[room.currentPlayerIndex] || room.players[0];
+  const questionActivePlayer =
+    room.players.find((p) => p.id === room.currentQuestion?.activePlayerId) || activePlayer;
   const isMyTurn = activePlayer?.id === myPlayerId;
   const isBonusRoll = room.status === 'bonus_roll' && room.isBonusRoll;
   const isMyBonusTurn = isBonusRoll && room.bonusPlayerId === myPlayerId;
@@ -184,17 +185,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       </main>
 
       {/* Question Modal (Synchronized in real-time) */}
-      {room.status === 'question' && room.currentQuestion && activePlayer && (
+      {room.status === 'question' && room.currentQuestion && questionActivePlayer && (
         <QuestionModal
           currentQuestion={room.currentQuestion}
-          activePlayer={activePlayer}
+          activePlayer={questionActivePlayer}
           players={room.players}
           myPlayerId={myPlayerId}
           isHost={isHost}
-          onAnswerSubmit={(text) => submitPlayerAnswer(room.roomCode, text)}
-          onEvaluateMain={(isCorrect) => evaluateMainPlayer(room.roomCode, isCorrect, room.hostId)}
+          onAnswerSubmit={(text) => submitPlayerAnswer(room.roomCode, text, myPlayerId)}
           onBuzzToSteal={() => buzzToStealQuestion(room.roomCode, myPlayerId)}
-          onEvaluateSteal={(isCorrect) => evaluateStealAnswer(room.roomCode, isCorrect, room.hostId)}
+          onStealTimeout={(stealerId) => handleStealTimeout(room.roomCode, stealerId)}
           onUseHint={() => usePlayerHint(room.roomCode, myPlayerId)}
         />
       )}

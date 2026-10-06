@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CurrentQuestionState, Player } from '../types/game';
 import { CATEGORY_CONFIG } from '../questions/boardData';
 import { sounds } from '../utils/audio';
@@ -8,16 +8,15 @@ import {
   HelpCircle,
   Sparkles,
   Send,
-  ShieldCheck,
   Eye,
   EyeOff,
-  Mic,
   MessageSquare,
   Clock,
   Zap,
   Lightbulb,
   UserX,
   Flame,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface QuestionModalProps {
@@ -27,9 +26,8 @@ interface QuestionModalProps {
   myPlayerId: string;
   isHost: boolean;
   onAnswerSubmit: (answerText: string) => void;
-  onEvaluateMain: (isCorrect: boolean) => void;
   onBuzzToSteal: () => void;
-  onEvaluateSteal: (isCorrect: boolean) => void;
+  onStealTimeout: (stealerId: string) => void;
   onUseHint: () => void;
 }
 
@@ -40,15 +38,16 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   myPlayerId,
   isHost,
   onAnswerSubmit,
-  onEvaluateMain,
   onBuzzToSteal,
-  onEvaluateSteal,
+  onStealTimeout,
   onUseHint,
 }) => {
   const [answerInput, setAnswerInput] = useState('');
   const [showOfficialAnswer, setShowOfficialAnswer] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(10);
   const [localHintRevealed, setLocalHintRevealed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const timeoutHandledRef = useRef<boolean>(false);
 
   const config = CATEGORY_CONFIG[currentQuestion.category] || CATEGORY_CONFIG.knowledge;
   const isMainPlayer = myPlayerId === currentQuestion.activePlayerId;
@@ -68,25 +67,37 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
 
   // 10s Countdown Timer for Stealer Phase
   useEffect(() => {
-    if (currentQuestion.phase === 'stealer_answering' && currentQuestion.stealStartTime) {
-      const updateCountdown = () => {
-        const elapsed = (Date.now() - (currentQuestion.stealStartTime || Date.now())) / 1000;
-        const remaining = Math.max(0, Math.ceil(10 - elapsed));
-        setTimeLeft(remaining);
-
-        if (remaining <= 0 && isHost) {
-          // Auto evaluate steal as timeout/incorrect if timer expires
-          onEvaluateSteal(false);
-        }
-      };
-
-      updateCountdown();
-      const interval = setInterval(updateCountdown, 500);
-      return () => clearInterval(interval);
-    } else {
+    if (currentQuestion.phase !== 'stealer_answering') {
+      timeoutHandledRef.current = false;
       setTimeLeft(10);
+      return;
     }
-  }, [currentQuestion.phase, currentQuestion.stealStartTime, isHost]);
+
+    if (!currentQuestion.stealStartTime || typeof currentQuestion.stealStartTime !== 'number') {
+      setTimeLeft(10);
+      return;
+    }
+
+    const startTs = currentQuestion.stealStartTime;
+    const stealerId = currentQuestion.stolenByPlayerId;
+
+    const checkCountdown = () => {
+      const elapsed = Math.floor((Date.now() - startTs) / 1000);
+      const remaining = Math.max(0, 10 - elapsed);
+      setTimeLeft(remaining);
+
+      // Timeout evaluation triggers safely
+      if (remaining <= 0 && stealerId && !timeoutHandledRef.current) {
+        timeoutHandledRef.current = true;
+        sounds.playIncorrect();
+        onStealTimeout(stealerId);
+      }
+    };
+
+    checkCountdown();
+    const interval = setInterval(checkCountdown, 500);
+    return () => clearInterval(interval);
+  }, [currentQuestion.phase, currentQuestion.stealStartTime, currentQuestion.stolenByPlayerId, onStealTimeout]);
 
   // Audio cues on phase shifts
   useEffect(() => {
@@ -99,14 +110,11 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
 
   const handleSubmitText = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!answerInput.trim()) return;
+    if (!answerInput.trim() || isSubmitting) return;
     sounds.playClick();
+    setIsSubmitting(true);
     onAnswerSubmit(answerInput.trim());
-  };
-
-  const handleSpokenAnswer = () => {
-    sounds.playClick();
-    onAnswerSubmit('Đã trả lời trực tiếp trước lớp / qua mic');
+    setTimeout(() => setIsSubmitting(false), 800);
   };
 
   const handleBuzzClick = () => {
@@ -177,7 +185,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                    Người chơi chính trả lời
+                    Người chơi chính đang trả lời
                   </p>
                   <p className="text-xs sm:text-sm font-extrabold text-slate-900">
                     {activePlayer.name} (Tung được {currentQuestion.originalDiceValue} ô)
@@ -300,7 +308,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                     </span>
                   </div>
                   <div className="font-mono text-sm sm:text-base font-bold text-slate-900 tracking-wider whitespace-pre-line leading-relaxed bg-white/80 p-2.5 rounded-xl border border-amber-200">
-                    {currentQuestion.hint || 'D__ là ch__ và d__ làm ch__'}
+                    {currentQuestion.hint || 'Chưa có gợi ý cho câu hỏi này.'}
                   </div>
                 </div>
               )}
@@ -342,8 +350,14 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 Câu trả lời của {currentQuestion.phase === 'stealer_answering' && stealer ? stealer.name : activePlayer.name}:
               </span>
               {currentQuestion.playerAnswer ? (
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-200 text-blue-800">
-                  Đã gửi
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  currentQuestion.result === 'correct'
+                    ? 'bg-emerald-200 text-emerald-900'
+                    : currentQuestion.result === 'incorrect'
+                    ? 'bg-rose-200 text-rose-900'
+                    : 'bg-blue-200 text-blue-800'
+                }`}>
+                  {currentQuestion.result === 'correct' ? '✅ Chính xác' : currentQuestion.result === 'incorrect' ? '❌ Chưa đúng' : 'Đã gửi'}
                 </span>
               ) : (
                 <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
@@ -358,18 +372,17 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
               </p>
             ) : (
               <p className="text-xs text-slate-500 italic py-1">
-                (Thí sinh có thể gõ câu trả lời vào máy hoặc đứng lên phát biểu trực tiếp trước lớp)
+                (Thí sinh nhập câu trả lời vào ô bên dưới rồi nhấn Gửi)
               </p>
             )}
           </div>
 
           {/* Answering Form for Active Player or Stealer */}
           {((currentQuestion.phase === 'active_answering' && isMainPlayer) ||
-            (currentQuestion.phase === 'stealer_answering' && isStealer)) &&
-            !currentQuestion.playerAnswer && (
+            (currentQuestion.phase === 'stealer_answering' && isStealer)) && (
               <div className="p-4 rounded-2xl bg-indigo-50/80 border-2 border-indigo-200 space-y-3">
                 <p className="text-xs font-black uppercase text-indigo-900">
-                  Lượt của bạn — Hãy đưa ra câu trả lời {currentQuestion.phase === 'stealer_answering' && `(còn ${timeLeft}s)`}:
+                  Lượt của bạn — Nhập câu trả lời {currentQuestion.phase === 'stealer_answering' && `(còn ${timeLeft}s)`}:
                 </p>
                 <form onSubmit={handleSubmitText} className="flex gap-2">
                   <input
@@ -377,37 +390,29 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                     value={answerInput}
                     onChange={(e) => setAnswerInput(e.target.value)}
                     placeholder="Gõ nội dung câu trả lời..."
+                    disabled={isSubmitting}
+                    autoFocus
                     className="flex-1 px-3.5 py-2.5 rounded-xl border-2 border-indigo-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 outline-none text-sm font-semibold bg-white"
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-sm cursor-pointer transition-all active:scale-95"
+                    disabled={isSubmitting || !answerInput.trim()}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-sm cursor-pointer transition-all active:scale-95"
                   >
-                    <Send className="w-4 h-4" /> Gửi
+                    <Send className="w-4 h-4" /> Gửi câu trả lời
                   </button>
                 </form>
-
-                <div className="flex items-center justify-between pt-1 border-t border-indigo-200">
-                  <span className="text-[11px] text-indigo-700 font-medium">Hoặc phát biểu trực tiếp:</span>
-                  <button
-                    type="button"
-                    onClick={handleSpokenAnswer}
-                    className="px-3 py-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-900 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer transition-all"
-                  >
-                    <Mic className="w-3.5 h-3.5" /> Xác nhận đã trả lời miệng
-                  </button>
-                </div>
               </div>
             )}
 
-          {/* Host Evaluation Panel */}
-          {isHost ? (
+          {/* Host Spectator View */}
+          {isHost && (
             <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-3 border border-slate-700">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-amber-300">
-                  <ShieldCheck className="w-4 h-4" />
+                  <Eye className="w-4 h-4" />
                   <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-wide">
-                    Bảng Chấm Điểm (Dành cho Quản Trò)
+                    Màn Hình Quản Trò (Theo Dõi)
                   </h3>
                 </div>
 
@@ -422,7 +427,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 >
                   {showOfficialAnswer ? (
                     <>
-                      <EyeOff className="w-3.5 h-3.5" /> Ẩn đáp án
+                      <EyeOff className="w-3.5 h-3.5" /> Ẩn đáp án chuẩn
                     </>
                   ) : (
                     <>
@@ -432,7 +437,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 </button>
               </div>
 
-              {/* Official Answer Box */}
+              {/* Official Answer Box for Host */}
               {showOfficialAnswer ? (
                 <div className="p-3 bg-slate-800 rounded-xl border border-slate-700 shadow-xs animate-fade-in">
                   <p className="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-0.5">
@@ -456,69 +461,18 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 </div>
               )}
 
-              {/* Evaluation Buttons depending on phase */}
-              {currentQuestion.phase === 'active_answering' && (
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <button
-                    onClick={() => {
-                      sounds.playCorrect();
-                      onEvaluateMain(true);
-                    }}
-                    className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all"
-                  >
-                    <CheckCircle2 className="w-5 h-5" />
-                    ✅ ĐÚNG (Đi {currentQuestion.originalDiceValue} ô + Tung thưởng)
-                  </button>
-                  <button
-                    onClick={() => {
-                      sounds.playIncorrect();
-                      onEvaluateMain(false);
-                    }}
-                    className="py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all"
-                  >
-                    <XCircle className="w-5 h-5" />
-                    ❌ CHƯA ĐÚNG (Mở cướp)
-                  </button>
-                </div>
-              )}
-
-              {currentQuestion.phase === 'stealing_open' && (
-                <div className="text-center py-2 text-xs font-bold text-amber-300">
-                  ⚡ Đang chờ người chơi bấm cướp quyền trả lời...
-                </div>
-              )}
-
-              {currentQuestion.phase === 'stealer_answering' && stealer && (
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <button
-                    onClick={() => {
-                      sounds.playCorrect();
-                      onEvaluateSteal(true);
-                    }}
-                    className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all"
-                  >
-                    <CheckCircle2 className="w-5 h-5" />
-                    ✅ {stealer.name} ĐÚNG (Đi {currentQuestion.originalDiceValue} ô)
-                  </button>
-                  <button
-                    onClick={() => {
-                      sounds.playIncorrect();
-                      onEvaluateSteal(false);
-                    }}
-                    className="py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all"
-                  >
-                    <XCircle className="w-5 h-5" />
-                    ❌ {stealer.name} SAI / HẾT GIỜ
-                  </button>
-                </div>
-              )}
+              <div className="p-2.5 bg-slate-800 rounded-xl text-center text-xs text-slate-300 font-semibold">
+                🤖 Hệ thống tự động chấm điểm và di chuyển quân khi người chơi gửi câu trả lời.
+              </div>
             </div>
-          ) : (
-            /* Non-host view */
+          )}
+
+          {/* Non-host, non-active player spectator info */}
+          {!isHost && !isMainPlayer && !isStealer && (
             <div className="p-3.5 rounded-xl bg-slate-100 text-center border border-slate-200">
               <p className="text-xs sm:text-sm font-bold text-slate-600 flex items-center justify-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
-                Quản trò đang theo dõi và đối chiếu kết quả...
+                Đang chờ {currentQuestion.phase === 'stealer_answering' && stealer ? stealer.name : activePlayer.name} trả lời câu hỏi...
               </p>
             </div>
           )}

@@ -34,7 +34,6 @@ export interface Player {
   avatar: string;
   position: number; // 1 - 24
   hintsRemaining: number; // Max 2 hint uses per game
-  score?: number;
   isReady?: boolean;
   connected: boolean;
   completedLap: boolean;
@@ -53,6 +52,7 @@ export interface CurrentQuestionState {
   questionIndex: number;
   questionText: string;
   officialAnswer: string;
+  acceptedAnswers?: string[];
   category: CategoryType;
   squareName: string;
   phase: QuestionPhase;

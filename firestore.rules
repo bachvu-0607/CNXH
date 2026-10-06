@@ -3,6 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -21,7 +25,7 @@ service cloud.firestore {
         && data.hostId is string
         && data.hostId.size() <= 128
         && data.status is string
-        && data.status in ['lobby', 'playing', 'rolling', 'moving', 'evaluating', 'finished']
+        && data.status in ['lobby', 'playing', 'question', 'bonus_roll', 'moving', 'finished']
         && data.players is list
         && data.players.size() <= 4;
     }
