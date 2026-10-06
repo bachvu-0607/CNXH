@@ -31,11 +31,10 @@ export default function App() {
       } else {
         setUserId('');
         signInAnonymously(auth).catch((err: any) => {
-          console.error('Firebase Anonymous Auth Error:', err);
           if (err?.code === 'auth/admin-restricted-operation' || err?.code === 'auth/operation-not-allowed') {
             setAuthError('Firebase Authentication chưa bật tính năng Anonymous (Ẩn danh). Bạn có thể Đăng nhập với Google để chơi ngay hoặc bật Anonymous trên Firebase Console.');
           } else {
-            setAuthError('Không thể đăng nhập ẩn danh (' + (err?.message || 'Lỗi kết nối') + '). Vui lòng thử lại.');
+            setAuthError('Chưa thể kết nối tài khoản ẩn danh (' + (err?.message || 'Lỗi mạng') + '). Vui lòng thử lại.');
           }
         });
       }
@@ -82,11 +81,10 @@ export default function App() {
       await signInAnonymously(auth);
       setAuthError(null);
     } catch (err: any) {
-      console.error('Retry Anonymous Auth Error:', err);
       if (err?.code === 'auth/admin-restricted-operation' || err?.code === 'auth/operation-not-allowed') {
         setAuthError('Firebase Authentication chưa bật tính năng Anonymous (Ẩn danh). Vui lòng vào Firebase Console > Authentication > Sign-in method và bật Anonymous.');
       } else {
-        setErrorMessage('Không thể đăng nhập ẩn danh: ' + (err?.message || 'Vui lòng thử lại.'));
+        setErrorMessage('Chưa thể kết nối tài khoản ẩn danh: ' + (err?.message || 'Vui lòng thử lại.'));
       }
     } finally {
       setIsAuthenticating(false);
