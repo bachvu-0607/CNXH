@@ -46,11 +46,12 @@ export interface Player {
 export type QuestionPhase =
   | 'active_answering'    // Main player is answering
   | 'stealing_open'       // Main player failed, buzzing is open for opponents
-  | 'stealer_answering'   // An opponent buzzed in, has 10s to answer
+  | 'stealer_answering'   // An opponent buzzed in, has 30s to answer
   | 'showing_result'      // Evaluating result display before auto-closing
   | 'resolved';           // Question finished
 
 export interface CurrentQuestionState {
+  phaseStartedAt: number;
   squareId: number;
   questionIndex: number;
   questionText: string;
@@ -76,12 +77,15 @@ export interface CurrentQuestionState {
 }
 
 export interface RoomState {
+  turnId: string;
+  lastAction?: { type: string; actorId: string };
   roomCode: string;
   hostId: string;
   hostName: string;
   hostIsPlayer: boolean;
   status: 'lobby' | 'playing' | 'question' | 'bonus_roll' | 'moving' | 'finished';
   players: Player[];
+  playerIds: string[];
   currentPlayerIndex: number;
   diceValue: number | null;
   isBonusRoll: boolean; // whether current roll is bonus roll

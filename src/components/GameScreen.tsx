@@ -5,6 +5,7 @@ import { Dice3D } from './Dice3D';
 import { PlayerSidebar } from './PlayerSidebar';
 import { QuestionModal } from './QuestionModal';
 import { BOARD_SQUARES, CATEGORY_CONFIG } from '../questions/boardData';
+import { MAIN_ANSWER_MS, STEAL_ANSWER_MS, BUZZ_WINDOW_MS, RESULT_MS } from '../game/engine';
 import { sounds } from '../utils/audio';
 import {
   submitPlayerAnswer,
@@ -15,6 +16,7 @@ import {
   handleStealTimeout,
   openQuestionModal,
   finishBonusRoll,
+  skipTurn,
 } from '../firebase/roomService';
 import {
   Volume2,
@@ -32,7 +34,7 @@ import {
 interface GameScreenProps {
   room: RoomState;
   myPlayerId: string;
-  onRollDice: () => void;
+  onRollDice: () => Promise<void>;
   onLeaveRoom: () => void;
 }
 
@@ -42,6 +44,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   onRollDice,
   onLeaveRoom,
 }) => {
+  const [actionError, setActionError] = useState('');
+  const turnId = room.turnId || 'legacy';
   const [isMuted, setIsMuted] = useState(sounds.getMuted());
   const [showRules, setShowRules] = useState(false);
   const [selectedSquareId, setSelectedSquareId] = useState<number | null>(null);
@@ -74,7 +78,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     if (isRollingDice || !canRoll) return;
     setIsRollingDice(true);
     try {
+      setActionError('');
       await onRollDice();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Không tung được xúc xắc. Vui lòng thử lại.');
     } finally {
       // Đợi xúc xắc quay xong (550ms) rồi mới hiện popup
       setTimeout(() => {
@@ -83,17 +90,46 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     }
   };
 
-  // Tự động kết thúc lượt thưởng và chuyển sang người kế tiếp sau 3 giây
+  // Any authenticated member can recover expired phases. The transaction checks
+  // the expected turn, phase and deadline, so duplicate/stale requests are no-ops.
   useEffect(() => {
-    if (room.status === 'moving' && room.isBonusRoll) {
-      const timer = setTimeout(() => {
-        if (room.bonusPlayerId === myPlayerId || isHost) {
-          finishBonusRoll(room.roomCode);
-        }
-      }, 3200);
-      return () => clearTimeout(timer);
-    }
-  }, [room.status, room.isBonusRoll, room.roomCode, room.bonusPlayerId, myPlayerId, isHost]);
+    let disposed = false;
+    let busy = false;
+    const mountedAt = Date.now();
+    const tick = async () => {
+      if (disposed || busy) return;
+      const q = room.currentQuestion;
+      const now = Date.now();
+      let action: (() => Promise<unknown>) | undefined;
+      if (room.status === 'moving' && room.isBonusRoll && now - mountedAt >= 3200) {
+        action = () => finishBonusRoll(room.roomCode, turnId);
+      } else if (room.status === 'question' && q) {
+        if (q.phase === 'active_answering' && q.questionStartTime != null && now >= q.questionStartTime + MAIN_ANSWER_MS)
+          action = () => handleMainPlayerTimeout(room.roomCode, turnId);
+        if (q.phase === 'stealer_answering' && q.stealStartTime != null && now >= q.stealStartTime + STEAL_ANSWER_MS)
+          action = () => handleStealTimeout(room.roomCode, turnId);
+        if (q.phase === 'stealing_open' && now >= (q.stealStartTime ?? q.phaseStartedAt ?? mountedAt) + BUZZ_WINDOW_MS)
+          action = () => closeQuestionAndAdvance(room.roomCode, turnId, 'stealing_open');
+        if (q.phase === 'showing_result' && now >= (q.phaseStartedAt ?? mountedAt) + RESULT_MS)
+          action = () => closeQuestionAndAdvance(room.roomCode, turnId, 'showing_result');
+      }
+      if (!action) return;
+      busy = true;
+      try { await action(); }
+      catch { if (!disposed) setActionError('Mất kết nối. Đang thử đồng bộ lại lượt chơi…'); }
+      finally { busy = false; }
+    };
+    void tick();
+    const timer = setInterval(tick, 1000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [room.status, room.isBonusRoll, room.roomCode, turnId, room.currentQuestion?.phase,
+    room.currentQuestion?.phaseStartedAt, room.currentQuestion?.questionStartTime, room.currentQuestion?.stealStartTime]);
+
+  const runControl = async (action: () => Promise<{ success: boolean; message?: string }>) => {
+    setActionError('');
+    try { const result = await action(); if (!result.success) setActionError(result.message || 'Thao tác chưa thành công.'); }
+    catch { setActionError('Mất kết nối. Vui lòng thử lại.'); }
+  };
 
   const selectedSquare = BOARD_SQUARES.find((s) => s.id === selectedSquareId);
   const selectedConfig = selectedSquare
@@ -183,6 +219,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         </div>
       </header>
 
+      {actionError && <div role="alert" className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-rose-50 text-rose-800 border border-rose-200 rounded-xl p-3 text-xs shadow">{actionError}</div>}
+      {isHost && ['playing', 'moving', 'bonus_roll'].includes(room.status) && (
+        <button className="fixed bottom-3 right-3 z-[60] px-3 py-2 rounded-xl bg-white border border-stone-300 text-stone-700 text-xs shadow"
+          onClick={() => { void runControl(() => skipTurn(room.roomCode, turnId)); }}>
+          Bỏ qua lượt của {activePlayer?.name}
+        </button>
+      )}
       {/* Nội dung chính: Bàn cờ (72%) và Cột bên (28%) */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 flex flex-col lg:flex-row gap-4 items-start justify-center">
         {/* Bàn cờ */}
@@ -255,12 +298,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({
               </h3>
             </div>
 
-            {isMyTurn ? (
+            {isMyTurn || isHost ? (
               <div className="pt-2 space-y-2">
                 <button
                   onClick={() => {
                     sounds.playClick();
-                    openQuestionModal(room.roomCode);
+                    void runControl(() => openQuestionModal(room.roomCode, turnId));
                   }}
                   className="w-full py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-bold text-sm shadow-md cursor-pointer transition-all flex items-center justify-center gap-2"
                 >
@@ -357,7 +400,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
                 <button
                   onClick={() => {
                     sounds.playClick();
-                    finishBonusRoll(room.roomCode);
+                    void runControl(() => finishBonusRoll(room.roomCode, turnId));
                   }}
                   className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-xs cursor-pointer transition-all flex items-center justify-center gap-1.5 active:scale-95"
                 >
@@ -376,17 +419,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       {/* Modal câu hỏi đồng bộ thời gian thực */}
       {room.status === 'question' && room.currentQuestion && questionActivePlayer && (
         <QuestionModal
+          key={turnId}
           currentQuestion={room.currentQuestion}
           activePlayer={questionActivePlayer}
           players={room.players}
           myPlayerId={myPlayerId}
           isHost={isHost}
-          onAnswerSubmit={(text) => submitPlayerAnswer(room.roomCode, text, myPlayerId)}
-          onCloseQuestion={() => closeQuestionAndAdvance(room.roomCode)}
-          onUseHint={() => usePlayerHint(room.roomCode, myPlayerId)}
-          onBuzz={() => buzzToStealQuestion(room.roomCode, myPlayerId)}
-          onMainPlayerTimeout={() => handleMainPlayerTimeout(room.roomCode)}
-          onStealTimeout={(stealerId) => handleStealTimeout(room.roomCode, stealerId)}
+          onAnswerSubmit={(text) => submitPlayerAnswer(room.roomCode, text, myPlayerId, turnId, room.currentQuestion!.phase)}
+          onCloseQuestion={() => closeQuestionAndAdvance(room.roomCode, turnId, room.currentQuestion!.phase)}
+          onUseHint={() => usePlayerHint(room.roomCode, myPlayerId, turnId)}
+          onBuzz={() => buzzToStealQuestion(room.roomCode, myPlayerId, turnId)}
         />
       )}
 

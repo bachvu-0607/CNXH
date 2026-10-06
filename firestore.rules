@@ -1,47 +1,318 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    function signedIn() { return request.auth != null; }
+    function validCode(code) { return code.matches('^[A-Z0-9]{5}$'); }
+    function b() { return resource.data; }
+    function a() { return request.resource.data; }
+    function ids(data) { return data.playerIds; }
+    function indexOf(data, uid) {
+      let p = data.playerIds;
+      return p.size() > 0 && p[0] == uid ? 0
+        : p.size() > 1 && p[1] == uid ? 1
+        : p.size() > 2 && p[2] == uid ? 2
+        : p.size() > 3 && p[3] == uid ? 3
+        : p.size() > 4 && p[4] == uid ? 4
+        : p.size() > 5 && p[5] == uid ? 5
+        : p.size() > 6 && p[6] == uid ? 6 : -1;
     }
-
-    function incoming() {
-      return request.resource.data;
+    function member() {
+      let oldDoc = resource.data; return request.auth.uid == oldDoc.hostId || request.auth.uid in ids(oldDoc); }
+    function host() {
+      let oldDoc = resource.data; return request.auth.uid == oldDoc.hostId; }
+    function validPlayer(p) {
+      return p.keys().hasOnly(['id','name','color','colorName','avatar','position','hintsRemaining','isReady','connected','completedLap','laps','joinedAt'])
+        && p.id is string && p.id.size() > 0 && p.id.size() <= 128
+        && p.name is string && p.name.size() > 0 && p.name.size() <= 60
+        && p.position is int && p.position >= 1 && p.position <= 24
+        && p.hintsRemaining is int && p.hintsRemaining >= 0 && p.hintsRemaining <= 2
+        && p.laps is int && p.laps >= 0 && p.laps <= 1
+        && p.completedLap == (p.laps == 1) && p.isReady is bool && p.connected is bool;
     }
-
-    function existing() {
-      return resource.data;
+    // Identity is checked for every slot. Player field validation is performed
+    // by the action that changes it: join validates the entire new player;
+    // ready only permits a boolean; start resets exact values; moved validates
+    // bounded movement; hint validates a bounded decrement; leave copies only
+    // existing players. Every action also preserves all other player fields.
+    function validSlot(players, playerIds, i) {
+      return players.size() <= i || playerIds[i] == players[i].id;
     }
-
-    function isValidRoom(data) {
-      return data.roomCode is string
-        && data.roomCode.size() <= 10
-        && data.hostId is string
-        && data.hostId.size() <= 128
-        && data.status is string
-        && data.status in ['lobby', 'playing', 'question', 'bonus_roll', 'moving', 'finished']
-        && data.players is list
-        && data.players.size() <= 4;
+    function validRoom(data) {
+      let playerIds = data.playerIds;
+      let players = data.players;
+      let count = players.size();
+      return data.keys().hasOnly(['roomCode','hostId','hostName','hostIsPlayer','status','players','playerIds','currentPlayerIndex','diceValue','isBonusRoll','bonusPlayerId','targetPosition','currentQuestion','usedQuestionKeys','winner','createdAt','updatedAt','turnId','lastAction'])
+        && data.hostIsPlayer == false && data.hostId is string && data.hostName is string
+        && players is list && count <= 7
+        && playerIds is list && playerIds.size() == count
+        && playerIds.toSet().size() == count && !(data.hostId in playerIds)
+        && validSlot(players,playerIds,0) && validSlot(players,playerIds,1) && validSlot(players,playerIds,2) && validSlot(players,playerIds,3)
+        && validSlot(players,playerIds,4) && validSlot(players,playerIds,5) && validSlot(players,playerIds,6)
+        && data.currentPlayerIndex is int && data.currentPlayerIndex >= 0
+        && (count == 0 ? data.currentPlayerIndex == 0 : data.currentPlayerIndex < count)
+        && data.status in ['lobby','playing','moving','question','bonus_roll','finished']
+        && data.turnId is string && data.turnId.size() > 0 && data.turnId.size() <= 128
+        && data.usedQuestionKeys is list && data.usedQuestionKeys.size() <= 96;
     }
-
-    // Default deny all
-    match /{document=**} {
-      allow read, write: if false;
+    function only(fields) {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      return nextDoc.diff(oldDoc).affectedKeys().hasOnly(fields.concat(['lastAction','updatedAt','turnId','playerIds']));
     }
-
-    // Connection test document
-    match /test/{docId} {
-      allow read: if true;
+    function sameTurn() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data; return nextDoc.turnId == oldDoc.get('turnId','legacy'); }
+    function nowish(time) {
+      return time is int && time <= request.time.toMillis() + 5000 && time >= request.time.toMillis() - 5000;
     }
-
-    // Game Rooms collection
-    match /rooms/{roomCode} {
-      allow read: if isValidId(roomCode);
-      allow create: if isValidId(roomCode) && isValidRoom(incoming());
-      allow update: if isValidId(roomCode) && isValidRoom(incoming()) && incoming().roomCode == existing().roomCode;
-      allow delete: if isValidId(roomCode);
+    function clearQuestion() {
+      let nextDoc = request.resource.data;
+      return nextDoc.currentQuestion == null && nextDoc.diceValue == null && nextDoc.targetPosition == null
+        && nextDoc.isBonusRoll == false && nextDoc.bonusPlayerId == null;
     }
+    function nextTurn() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      return nextDoc.status == 'playing' && clearQuestion()
+        && nextDoc.currentPlayerIndex == (oldDoc.currentPlayerIndex + 1) % oldDoc.players.size()
+        && nextDoc.turnId != oldDoc.get('turnId','legacy') && nextDoc.winner == oldDoc.winner;
+    }
+    function sameOtherPlayers(i, fields) {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      return i >= 0 && nextDoc.players.size() == oldDoc.players.size()
+        && nextDoc.players.removeAll([nextDoc.players[i]]) == oldDoc.players.removeAll([oldDoc.players[i]])
+        && nextDoc.players[i].diff(oldDoc.players[i]).affectedKeys().hasOnly(fields);
+    }
+    function moved(i, dice) {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let old = oldDoc.players[i];
+      let next = nextDoc.players[i];
+      let crossed = old.position + dice > 24;
+      return sameOtherPlayers(i, ['position','completedLap','laps'])
+        && next.position == ((old.position + dice - 1) % 24) + 1
+        && next.position is int && next.position >= 1 && next.position <= 24
+        && next.laps == old.laps + (crossed ? 1 : 0)
+        && next.laps is int && next.laps >= 0 && next.laps <= 1
+        && next.completedLap == (old.completedLap || crossed);
+    }
+    function finished(i) {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let p = nextDoc.players[i];
+      return nextDoc.status == 'finished' && p.completedLap && nextDoc.currentQuestion == null
+        && nextDoc.isBonusRoll == false && nextDoc.bonusPlayerId == null && nextDoc.targetPosition == null
+        && nextDoc.currentPlayerIndex == oldDoc.currentPlayerIndex && sameTurn()
+        && nextDoc.winner == {'id':p.id,'name':p.name,'avatar':p.avatar,'color':p.color,'laps':p.laps};
+    }
+    function questionOnly(fields) {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      return sameTurn() && only(['currentQuestion'])
+        && nextDoc.currentQuestion.diff(oldDoc.currentQuestion).affectedKeys().hasOnly(fields);
+    }
+    function join() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let i = indexOf(oldDoc, request.auth.uid);
+      let count = oldDoc.players.size();
+      return sameTurn() && only(['players']) && request.auth.uid != oldDoc.hostId && (
+        i >= 0 ? sameOtherPlayers(i, ['name','connected']) && nextDoc.players[i].connected == true && validPlayer(nextDoc.players[i])
+        : oldDoc.status == 'lobby' && count < 7 && nextDoc.players.size() == count + 1
+          && nextDoc.players.removeAll([nextDoc.players[count]]) == oldDoc.players
+          && validPlayer(nextDoc.players[count]) && nextDoc.players[count].id == request.auth.uid && nextDoc.players[count].position == 1
+          && nextDoc.players[count].hintsRemaining == 2 && nextDoc.players[count].laps == 0
+          && nextDoc.players[count].isReady == false && nextDoc.players[count].connected == true);
+    }
+    function ready() {
+      let oldDoc = resource.data;
+      let i = indexOf(oldDoc, request.auth.uid);
+      return oldDoc.status == 'lobby' && sameTurn() && only(['players'])
+        && sameOtherPlayers(i, ['isReady'])
+        && request.resource.data.players[i].isReady is bool;
+    }
+    function resetPlayer(before, after) {
+      return after.diff(before).affectedKeys().hasOnly(['position','hintsRemaining','completedLap','laps','isReady'])
+        && after.position == 1 && after.hintsRemaining == 2
+        && after.completedLap == false && after.laps == 0 && after.isReady == false;
+    }
+    function resetSlot(i) {
+      return resource.data.players.size() <= i
+        || resetPlayer(resource.data.players[i], request.resource.data.players[i]);
+    }
+    function start() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      return host() && (nextDoc.lastAction.type == 'start' ? oldDoc.status == 'lobby' : oldDoc.status == 'finished')
+        && oldDoc.players.size() > 0 && ids(nextDoc) == ids(oldDoc)
+        && resetSlot(0) && resetSlot(1) && resetSlot(2) && resetSlot(3) && resetSlot(4) && resetSlot(5) && resetSlot(6)
+        && nextDoc.status == 'playing' && nextDoc.currentPlayerIndex == 0 && clearQuestion()
+        && nextDoc.winner == null && nextDoc.usedQuestionKeys == [] && nextDoc.turnId != oldDoc.get('turnId','legacy');
+    }
+    function roll() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let i = oldDoc.currentPlayerIndex;
+      let dice = nextDoc.diceValue;
+      let q = nextDoc.currentQuestion;
+      return request.auth.uid == oldDoc.players[i].id && sameTurn()
+        && dice is int && dice >= 1 && dice <= 6 && nextDoc.currentPlayerIndex == i && (
+        oldDoc.status == 'playing' ? (
+          only(['status','diceValue','isBonusRoll','bonusPlayerId','targetPosition','currentQuestion','usedQuestionKeys'])
+          && nextDoc.status == 'moving' && nextDoc.isBonusRoll == false && nextDoc.bonusPlayerId == null
+          && nextDoc.targetPosition == ((oldDoc.players[i].position + dice - 1) % 24) + 1
+          && q.targetPosition == nextDoc.targetPosition && q.squareId == nextDoc.targetPosition && q.originalDiceValue == dice
+          && q.activePlayerId == request.auth.uid && q.phase == 'active_answering'
+          && q.questionStartTime == null && q.stealStartTime == null && q.stolenByPlayerId == null
+          && q.resultWinnerId == null && q.result == null && q.playerAnswer == ''
+          && q.hintUsedByPlayerIds == [] && nowish(q.phaseStartedAt)
+        ) : oldDoc.status == 'bonus_roll' && oldDoc.isBonusRoll && oldDoc.bonusPlayerId == request.auth.uid
+          && only(['status','players','diceValue','targetPosition','currentQuestion','isBonusRoll','bonusPlayerId','winner'])
+          && moved(i, dice)
+          && (nextDoc.players[i].completedLap ? finished(i) :
+            nextDoc.status == 'moving' && nextDoc.isBonusRoll && nextDoc.bonusPlayerId == request.auth.uid
+            && nextDoc.targetPosition == nextDoc.players[i].position && nextDoc.winner == null));
+    }
+    function open() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let q = nextDoc.currentQuestion;
+      return (host() || request.auth.uid == oldDoc.players[oldDoc.currentPlayerIndex].id)
+        && oldDoc.status == 'moving' && !oldDoc.isBonusRoll && oldDoc.currentQuestion.questionStartTime == null
+        && sameTurn() && only(['status','currentQuestion']) && nextDoc.status == 'question'
+        && q.diff(oldDoc.currentQuestion).affectedKeys().hasOnly(['questionStartTime','phaseStartedAt'])
+        && nowish(q.questionStartTime) && q.phaseStartedAt == q.questionStartTime;
+    }
+    function answerOrTimeout() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let old = oldDoc.currentQuestion;
+      let q = nextDoc.currentQuestion;
+      let main = old.phase == 'active_answering';
+      let deadline = (main ? old.questionStartTime : old.stealStartTime) + (main ? 60000 : 30000);
+      let timeout = nextDoc.lastAction.type == 'timeout';
+      let owner = main ? old.activePlayerId : old.stolenByPlayerId;
+      return oldDoc.status == 'question' && old.phase in ['active_answering','stealer_answering']
+        && questionOnly(['phase','phaseStartedAt','result','resultWinnerId','playerAnswer','stealStartTime'])
+        && nowish(q.phaseStartedAt) && q.playerAnswer is string && q.playerAnswer.size() <= 500
+        && (timeout ? request.time.toMillis() >= deadline : request.auth.uid == owner && request.time.toMillis() < deadline)
+        && ((!timeout && q.result == 'correct') ?
+          q.phase == 'showing_result' && q.resultWinnerId == owner && q.stealStartTime == old.stealStartTime
+          : main && oldDoc.players.size() > 1 ?
+            q.phase == 'stealing_open' && q.result == null && q.resultWinnerId == null && q.stealStartTime == q.phaseStartedAt
+            : q.phase == 'showing_result' && q.result == 'incorrect' && q.resultWinnerId == null && q.stealStartTime == old.stealStartTime);
+    }
+    function buzz() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let old = oldDoc.currentQuestion;
+      let q = nextDoc.currentQuestion;
+      return oldDoc.status == 'question' && old.phase == 'stealing_open' && old.stolenByPlayerId == null
+        && request.auth.uid in ids(oldDoc) && request.auth.uid != old.activePlayerId
+        && request.time.toMillis() < old.stealStartTime + 12000
+        && questionOnly(['phase','phaseStartedAt','stolenByPlayerId','stealStartTime','playerAnswer'])
+        && q.phase == 'stealer_answering' && q.stolenByPlayerId == request.auth.uid
+        && nowish(q.stealStartTime) && q.phaseStartedAt == q.stealStartTime && q.playerAnswer == '';
+    }
+    function hint() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let i = indexOf(oldDoc,request.auth.uid);
+      return oldDoc.status == 'question' && oldDoc.currentQuestion.phase != 'showing_result'
+        && sameTurn() && only(['players','currentQuestion']) && sameOtherPlayers(i, ['hintsRemaining'])
+        && oldDoc.players[i].hintsRemaining > 0
+        && nextDoc.players[i].hintsRemaining == oldDoc.players[i].hintsRemaining - 1
+        && nextDoc.players[i].hintsRemaining is int && nextDoc.players[i].hintsRemaining >= 0 && nextDoc.players[i].hintsRemaining <= 2
+        && nextDoc.currentQuestion.diff(oldDoc.currentQuestion).affectedKeys().hasOnly(['hintUsedByPlayerIds'])
+        && !(request.auth.uid in oldDoc.currentQuestion.hintUsedByPlayerIds)
+        && nextDoc.currentQuestion.hintUsedByPlayerIds == oldDoc.currentQuestion.hintUsedByPlayerIds.concat([request.auth.uid]);
+    }
+    function close() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let q = oldDoc.currentQuestion;
+      let winnerIndex = indexOf(oldDoc,q.resultWinnerId);
+      return oldDoc.status == 'question'
+        && only(['status','players','playerIds','currentPlayerIndex','diceValue','targetPosition','currentQuestion','isBonusRoll','bonusPlayerId','winner'])
+        && (q.phase == 'stealing_open' ?
+          request.time.toMillis() >= q.stealStartTime + 12000 && nextDoc.players == oldDoc.players && nextTurn()
+          : q.phase == 'showing_result' && (q.result == 'correct' && winnerIndex >= 0 ?
+            moved(winnerIndex, q.originalDiceValue) && (nextDoc.players[winnerIndex].completedLap ? finished(winnerIndex)
+              : q.resultWinnerId == q.activePlayerId ?
+                nextDoc.status == 'bonus_roll' && nextDoc.isBonusRoll && nextDoc.bonusPlayerId == q.activePlayerId
+                && nextDoc.currentQuestion == null && nextDoc.diceValue == null && nextDoc.targetPosition == null
+                && nextDoc.currentPlayerIndex == oldDoc.currentPlayerIndex && sameTurn() && nextDoc.winner == null
+                : nextTurn())
+            : nextDoc.players == oldDoc.players && nextTurn()));
+    }
+    function finishBonus() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      return oldDoc.status == 'moving' && oldDoc.isBonusRoll
+        && only(['status','currentPlayerIndex','diceValue','targetPosition','currentQuestion','isBonusRoll','bonusPlayerId'])
+        && nextDoc.players == oldDoc.players && nextTurn();
+    }
+    function skip() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      return host() && oldDoc.status in ['playing','moving','bonus_roll']
+        && only(['status','currentPlayerIndex','diceValue','targetPosition','currentQuestion','isBonusRoll','bonusPlayerId'])
+        && nextDoc.players == oldDoc.players && nextTurn();
+    }
+    function leave() {
+      let nextDoc = request.resource.data;
+      let oldDoc = resource.data;
+      let i = indexOf(oldDoc,request.auth.uid);
+      let q = oldDoc.currentQuestion;
+      return i >= 0 && nextDoc.players == oldDoc.players.removeAll([oldDoc.players[i]])
+        && only(['players','currentPlayerIndex','status','diceValue','targetPosition','currentQuestion','isBonusRoll','bonusPlayerId','winner'])
+        && nextDoc.winner == oldDoc.winner
+        && (oldDoc.status in ['lobby','finished'] ?
+          only(['players','currentPlayerIndex']) && sameTurn()
+          : nextDoc.players.size() == 0 ? nextDoc.status == 'lobby' && clearQuestion() && nextDoc.turnId != oldDoc.get('turnId','legacy')
+          : oldDoc.currentPlayerIndex == i ?
+            nextDoc.status == 'playing' && clearQuestion() && nextDoc.currentPlayerIndex == i % nextDoc.players.size()
+            && nextDoc.turnId != oldDoc.get('turnId','legacy')
+            : nextDoc.currentPlayerIndex == indexOf(nextDoc,oldDoc.players[oldDoc.currentPlayerIndex].id) && sameTurn()
+              && nextDoc.status == oldDoc.status && nextDoc.diceValue == oldDoc.diceValue && nextDoc.isBonusRoll == oldDoc.isBonusRoll
+              && nextDoc.bonusPlayerId == oldDoc.bonusPlayerId && nextDoc.targetPosition == oldDoc.targetPosition
+              && (nextDoc.currentQuestion == q ||
+                q != null && (q.stolenByPlayerId == request.auth.uid || q.resultWinnerId == request.auth.uid || q.phase == 'stealing_open' && nextDoc.players.size() == 1)
+                && nextDoc.currentQuestion.diff(q).affectedKeys().hasOnly(['phase','phaseStartedAt','result','resultWinnerId','playerAnswer','stolenByPlayerId'])
+                && nextDoc.currentQuestion.phase == 'showing_result' && nextDoc.currentQuestion.result == 'incorrect'
+                && nextDoc.currentQuestion.resultWinnerId == null && nowish(nextDoc.currentQuestion.phaseStartedAt)));
+    }
+    function validUpdate() {
+      let next = request.resource.data;
+      let old = resource.data;
+      let type = next.lastAction.type;
+      return next.roomCode == old.roomCode && next.hostId == old.hostId && next.hostName == old.hostName
+        && next.createdAt == old.createdAt && next.updatedAt == request.time
+        && next.lastAction.actorId == request.auth.uid && validRoom(next)
+        && (type == 'join' ? join() : member() && (
+          type == 'ready' ? ready() : type in ['start','restart'] ? start() : type == 'leave' ? leave()
+          : type == 'roll' ? roll() : type == 'open' ? open() : type in ['answer','timeout'] ? answerOrTimeout()
+          : type == 'buzz' ? buzz() : type == 'hint' ? hint() : type == 'close' ? close()
+          : type == 'finish_bonus' ? finishBonus() : type == 'skip' ? skip() : false));
+    }
+    match /rooms/{code} {
+      // Exact code lookup supports invitations; listing every room is forbidden.
+      allow get: if signedIn() && validCode(code);
+      allow list: if false;
+      allow create: if signedIn() && validCode(code) && validRoom(a())
+        && a().roomCode == code && a().hostId == request.auth.uid && a().players == []
+        && a().status == 'lobby' && clearNewRoom() && a().winner == null && a().usedQuestionKeys == []
+        && a().createdAt == request.time && a().updatedAt == request.time
+        && a().lastAction == {'type':'create','actorId':request.auth.uid};
+      allow update: if signedIn() && validCode(code) && validUpdate();
+      allow delete: if signedIn() && host();
+    }
+    function clearNewRoom() {
+      let nextDoc = request.resource.data;
+      return nextDoc.currentPlayerIndex == 0 && nextDoc.currentQuestion == null && nextDoc.diceValue == null
+        && nextDoc.targetPosition == null && nextDoc.isBonusRoll == false && nextDoc.bonusPlayerId == null;
+    }
+    match /{document=**} { allow read, write: if false; }
   }
 }

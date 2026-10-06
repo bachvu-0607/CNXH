@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './firebase/config';
-import { testConnection, createRoom, joinRoom, subscribeToRoom, startGame, rollDice, restartGame, leaveRoom } from './firebase/roomService';
+import { createRoom, joinRoom, subscribeToRoom, startGame, rollDice, restartGame, leaveRoom } from './firebase/roomService';
 import { RoomState } from './types/game';
 import { HomeScreen } from './components/HomeScreen';
 import { LobbyScreen } from './components/LobbyScreen';
@@ -9,17 +9,8 @@ import { GameScreen } from './components/GameScreen';
 import { ResultScreen } from './components/ResultScreen';
 import { sounds } from './utils/audio';
 
-function getOrCreateUserId(): string {
-  let uid = localStorage.getItem('boardgame_user_id');
-  if (!uid) {
-    uid = 'player_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
-    localStorage.setItem('boardgame_user_id', uid);
-  }
-  return uid;
-}
-
 export default function App() {
-  const [userId, setUserId] = useState<string>(() => getOrCreateUserId());
+  const [userId, setUserId] = useState<string>('');
   const [currentRoomCode, setCurrentRoomCode] = useState<string>('');
   const [inviteRoomCode, setInviteRoomCode] = useState<string>('');
   const [room, setRoom] = useState<RoomState | null>(null);
@@ -31,14 +22,13 @@ export default function App() {
 
   // Initialize auth & check invitation URL
   useEffect(() => {
-    testConnection();
-
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserId(user.uid);
       } else {
+        setUserId('');
         signInAnonymously(auth).catch((err) => {
-          console.warn('Anonymous auth fallback:', err);
+          setErrorMessage('Không thể đăng nhập để chơi. Vui lòng tải lại trang và kiểm tra kết nối.');
         });
       }
     });
@@ -48,11 +38,13 @@ export default function App() {
     const roomParam = urlParams.get('room');
     if (roomParam) {
       const code = roomParam.trim().toUpperCase();
-      setInviteRoomCode(code);
-      setCurrentRoomCode(code);
+      if (/^[A-Z0-9]{5}$/.test(code)) {
+        setInviteRoomCode(code);
+        setCurrentRoomCode(code);
+      } else setErrorMessage('Liên kết chứa mã phòng không hợp lệ.');
     } else {
       const cachedRoom = localStorage.getItem('boardgame_current_room');
-      if (cachedRoom) {
+      if (cachedRoom && /^[A-Z0-9]{5}$/i.test(cachedRoom)) {
         setCurrentRoomCode(cachedRoom.toUpperCase());
       }
     }
@@ -62,7 +54,7 @@ export default function App() {
 
   // Subscribe to real-time room changes
   useEffect(() => {
-    if (!currentRoomCode) return;
+    if (!currentRoomCode || !userId) return;
 
     const unsubscribe = subscribeToRoom(currentRoomCode, (updatedRoom) => {
       if (updatedRoom) {
@@ -74,14 +66,15 @@ export default function App() {
         localStorage.removeItem('boardgame_current_room');
         setErrorMessage('Phòng không tồn tại hoặc đã kết thúc.');
       }
-    });
+    }, setErrorMessage);
 
     return () => unsubscribe();
-  }, [currentRoomCode]);
+  }, [currentRoomCode, userId]);
 
   // Handle Room Creation
   const handleCreateRoom = async (playerName: string, hostIsPlayer: boolean = false) => {
-    const activeUid = userId || getOrCreateUserId();
+    const activeUid = userId;
+    if (!activeUid) { setErrorMessage('Đang đăng nhập, vui lòng thử lại sau vài giây.'); return; }
     setIsCreating(true);
     setErrorMessage(null);
     try {
@@ -99,7 +92,8 @@ export default function App() {
 
   // Handle Room Join
   const handleJoinRoom = async (code: string, playerName: string) => {
-    const activeUid = userId || getOrCreateUserId();
+    const activeUid = userId;
+    if (!activeUid) { setErrorMessage('Đang đăng nhập, vui lòng thử lại sau vài giây.'); return; }
     setIsJoining(true);
     setErrorMessage(null);
     try {
@@ -122,9 +116,11 @@ export default function App() {
   // Handle Game Start by Host
   const handleStartGame = async () => {
     if (!room || !userId) return;
+    setErrorMessage(null);
     setIsStarting(true);
     try {
-      await startGame(room.roomCode, userId);
+      const result = await startGame(room.roomCode, userId);
+      if (!result.success) throw new Error(result.message);
     } catch (err: any) {
       console.error('Start game error:', err);
       setErrorMessage(err?.message || 'Không thể bắt đầu trò chơi.');
@@ -137,20 +133,23 @@ export default function App() {
   const handleRollDice = async () => {
     if (!room || !userId) return;
     try {
-      await rollDice(room.roomCode, userId);
+      const result = await rollDice(room.roomCode, userId, room.turnId || 'legacy');
+      if (!result.success) throw new Error(result.message);
     } catch (err: any) {
-      console.error('Roll error:', err);
+      throw err;
     }
   };
 
   // Handle Restart Game by Host
   const handleRestartGame = async () => {
     if (!room || !userId) return;
+    setErrorMessage(null);
     setIsRestarting(true);
     try {
-      await restartGame(room.roomCode, userId);
+      const result = await restartGame(room.roomCode, userId);
+      if (!result.success) throw new Error(result.message);
     } catch (err: any) {
-      console.error('Restart error:', err);
+      setErrorMessage(err?.message || 'Không thể bắt đầu ván mới.');
     } finally {
       setIsRestarting(false);
     }
@@ -161,9 +160,11 @@ export default function App() {
     sounds.playClick();
     if (room && userId) {
       try {
-        await leaveRoom(room.roomCode, userId);
+        const result = await leaveRoom(room.roomCode, userId);
+        if (!result.success) throw new Error(result.message);
       } catch (err) {
-        console.error('Leave error:', err);
+        setErrorMessage('Chưa rời được phòng. Vui lòng kiểm tra kết nối và thử lại.');
+        return;
       }
     }
     setRoom(null);
@@ -183,16 +184,21 @@ export default function App() {
       <HomeScreen
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
-        isCreating={isCreating}
-        isJoining={isJoining}
+        isCreating={isCreating || !userId}
+        isJoining={isJoining || !userId}
         errorMessage={errorMessage}
         initialRoomCode={inviteRoomCode || currentRoomCode}
       />
     );
   }
 
+  const withError = (content: React.ReactNode) => <>
+    {content}
+    {errorMessage && <div role="alert" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[80] bg-rose-50 text-rose-800 border border-rose-200 rounded-xl p-3 text-sm shadow">{errorMessage}</div>}
+  </>;
+
   if (room.status === 'lobby') {
-    return (
+    return withError(
       <LobbyScreen
         room={room}
         myPlayerId={userId}
@@ -204,7 +210,7 @@ export default function App() {
   }
 
   if (room.status === 'finished') {
-    return (
+    return withError(
       <ResultScreen
         room={room}
         myPlayerId={userId}
@@ -216,7 +222,7 @@ export default function App() {
   }
 
   // Active Game screen (status: 'playing', 'rolling', 'moving', 'evaluating')
-  return (
+  return withError(
     <GameScreen
       room={room}
       myPlayerId={userId}

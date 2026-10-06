@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CurrentQuestionState, Player } from '../types/game';
 import { CATEGORY_CONFIG } from '../questions/boardData';
 import { sounds } from '../utils/audio';
@@ -20,12 +20,10 @@ interface QuestionModalProps {
   players: Player[];
   myPlayerId: string;
   isHost: boolean;
-  onAnswerSubmit: (answerText: string) => void;
-  onCloseQuestion: () => void;
-  onUseHint: () => void;
-  onBuzz: () => void;
-  onMainPlayerTimeout: () => void;
-  onStealTimeout: (stealerId: string) => void;
+  onAnswerSubmit: (answerText: string) => Promise<{ success: boolean; message?: string }>;
+  onCloseQuestion: () => Promise<{ success: boolean; message?: string }>;
+  onUseHint: () => Promise<{ success: boolean; message?: string }>;
+  onBuzz: () => Promise<{ success: boolean; message?: string }>;
 }
 
 export const QuestionModal: React.FC<QuestionModalProps> = ({
@@ -38,26 +36,13 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   onCloseQuestion,
   onUseHint,
   onBuzz,
-  onMainPlayerTimeout,
-  onStealTimeout,
 }) => {
+  const [actionError, setActionError] = useState('');
   const [answerInput, setAnswerInput] = useState('');
   const [localHintRevealed, setLocalHintRevealed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resultCountdown, setResultCountdown] = useState<number>(3);
   const [timerRemaining, setTimerRemaining] = useState<number>(60);
-  const closeTriggeredRef = useRef<boolean>(false);
-  const timeoutTriggeredRef = useRef<boolean>(false);
-
-  const onCloseRef = useRef(onCloseQuestion);
-  onCloseRef.current = onCloseQuestion;
-
-  const onMainTimeoutRef = useRef(onMainPlayerTimeout);
-  onMainTimeoutRef.current = onMainPlayerTimeout;
-
-  const onStealTimeoutRef = useRef(onStealTimeout);
-  onStealTimeoutRef.current = onStealTimeout;
-
   const config = CATEGORY_CONFIG[currentQuestion.category] || CATEGORY_CONFIG.knowledge;
   const isMainPlayer = myPlayerId === currentQuestion.activePlayerId;
   const stealerPlayer = players.find((p) => p.id === currentQuestion.stolenByPlayerId);
@@ -67,141 +52,60 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   const myPlayer = players.find((p) => p.id === myPlayerId);
   const hintsRemaining = myPlayer?.hintsRemaining ?? 2;
   const hasUsedHintThisQuestion =
-    currentQuestion.hintUsedByPlayerIds?.includes(myPlayerId) || localHintRevealed;
+    currentQuestion.hintUsedByPlayerIds?.includes(myPlayerId) || false;
 
-  // 1. Bộ đếm ngược 60 giây cho người chơi chính (active_answering)
+  // Countdown is presentation only. GameScreen retries expired transitions on
+  // every connected client; leaving this modal cannot strand the room.
   useEffect(() => {
-    if (currentQuestion.phase !== 'active_answering') return;
-    timeoutTriggeredRef.current = false;
     setAnswerInput('');
+    setActionError('');
     setIsSubmitting(false);
-
-    // Tính thời gian dựa trên questionStartTime hoặc mặc định 60s
-    const startTime = currentQuestion.questionStartTime || Date.now();
-    const updateTimer = () => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const remaining = Math.max(0, 60 - elapsed);
-      setTimerRemaining(remaining);
-
-      if (remaining <= 0 && !timeoutTriggeredRef.current) {
-        timeoutTriggeredRef.current = true;
-        if (isMainPlayer) {
-          onMainTimeoutRef.current();
-        }
-      }
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [currentQuestion.phase, currentQuestion.questionStartTime, isMainPlayer]);
-
-  // 2. Bộ đếm ngược 30 giây cho người cướp quyền (stealer_answering)
-  useEffect(() => {
-    if (currentQuestion.phase !== 'stealer_answering') return;
-    timeoutTriggeredRef.current = false;
-    setAnswerInput('');
-    setIsSubmitting(false);
-
-    const startTime = currentQuestion.stealStartTime || Date.now();
-    const updateStealTimer = () => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const remaining = Math.max(0, 30 - elapsed);
-      setTimerRemaining(remaining);
-
-      if (remaining <= 0 && !timeoutTriggeredRef.current) {
-        timeoutTriggeredRef.current = true;
-        if (isStealer) {
-          onStealTimeoutRef.current(currentQuestion.stolenByPlayerId || '');
-        }
-      }
-    };
-
-    updateStealTimer();
-    const interval = setInterval(updateStealTimer, 1000);
-    return () => clearInterval(interval);
-  }, [currentQuestion.phase, currentQuestion.stealStartTime, isStealer, currentQuestion.stolenByPlayerId]);
-
-  // 3. Thời gian mở cướp quyền (stealing_open): 12 giây nếu không ai cướp thì tự kết thúc câu hỏi
-  useEffect(() => {
-    if (currentQuestion.phase !== 'stealing_open') return;
-
-    const timer = setTimeout(() => {
-      if (isMainPlayer || isHost) {
-        onCloseRef.current();
-      }
-    }, 12000);
-
-    return () => clearTimeout(timer);
-  }, [currentQuestion.phase, isMainPlayer, isHost]);
-
-  // 4. Tự động đóng modal sau 3s khi hiện kết quả (showing_result)
-  useEffect(() => {
-    if (currentQuestion.phase !== 'showing_result') {
-      closeTriggeredRef.current = false;
-      setResultCountdown(3);
-      return;
+    if (currentQuestion.phase === 'showing_result') {
+      if (currentQuestion.result === 'correct') sounds.playCorrect();
+      else sounds.playIncorrect();
     }
+    const mountedAt = Date.now();
+    const update = () => {
+      const phase = currentQuestion.phase;
+      const start = phase === 'active_answering' ? currentQuestion.questionStartTime
+        : phase === 'stealer_answering' || phase === 'stealing_open' ? currentQuestion.stealStartTime
+        : currentQuestion.phaseStartedAt;
+      const duration = phase === 'active_answering' ? 60 : phase === 'stealer_answering' ? 30 : phase === 'stealing_open' ? 12 : 3;
+      const remaining = Math.max(0, Math.ceil(duration - (Date.now() - (start ?? mountedAt)) / 1000));
+      setTimerRemaining(remaining);
+      setResultCountdown(remaining);
+    };
+    update();
+    const timer = setInterval(update, 250);
+    return () => clearInterval(timer);
+  }, [currentQuestion.phase, currentQuestion.phaseStartedAt, currentQuestion.questionStartTime, currentQuestion.stealStartTime]);
 
-    if (currentQuestion.result === 'correct') {
-      sounds.playCorrect();
-    } else if (currentQuestion.result === 'incorrect') {
-      sounds.playIncorrect();
-    }
-
-    // Người có liên quan (người thắng hoặc người chính) chạy đếm ngược 3s đóng
-    setResultCountdown(3);
-    const interval = setInterval(() => {
-      setResultCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          if (!closeTriggeredRef.current) {
-            closeTriggeredRef.current = true;
-            onCloseRef.current();
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [currentQuestion.phase, currentQuestion.result]);
-
-  const handleSubmitText = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!answerInput.trim() || isSubmitting) return;
-    sounds.playClick();
+  const runAction = async (action: () => Promise<{ success: boolean; message?: string }>) => {
+    if (isSubmitting) return false;
     setIsSubmitting(true);
-    onAnswerSubmit(answerInput.trim());
+    setActionError('');
+    try {
+      const result = await action();
+      if (!result.success) setActionError(result.message || 'Lượt chơi đã thay đổi.');
+      return result.success;
+    } catch { setActionError('Mất kết nối. Vui lòng thử lại.'); return false; }
+    finally { setIsSubmitting(false); }
   };
-
-  const handleToggleHint = () => {
+  const handleSubmitText = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!answerInput.trim() || timerRemaining <= 0) return;
     sounds.playClick();
-    if (isHost) {
-      setLocalHintRevealed(!localHintRevealed);
-      return;
-    }
-
-    if (hasUsedHintThisQuestion) {
-      setLocalHintRevealed(!localHintRevealed);
-      return;
-    }
-
-    if (hintsRemaining > 0) {
+    await runAction(() => onAnswerSubmit(answerInput.trim()));
+  };
+  const handleToggleHint = async () => {
+    if (isHost || hasUsedHintThisQuestion) {
+      setLocalHintRevealed(v => !v);
+    } else if (hintsRemaining > 0 && await runAction(onUseHint)) {
       setLocalHintRevealed(true);
-      onUseHint();
     }
   };
-
-  const handleManualClose = () => {
-    if (!closeTriggeredRef.current) {
-      closeTriggeredRef.current = true;
-      onCloseRef.current();
-    }
-  };
-
-  const isHintVisible = isHost ? localHintRevealed : hasUsedHintThisQuestion;
+  const handleManualClose = () => { void runAction(onCloseQuestion); };
+  const isHintVisible = localHintRevealed;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-stone-900/40 backdrop-blur-xs animate-fade-in select-none">
@@ -284,6 +188,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
             </div>
           )}
 
+          {actionError && <p role="alert" className="text-xs text-rose-700">{actionError}</p>}
           {/* Hộp câu hỏi */}
           <div className="p-3.5 rounded-xl bg-[#fbfcfb] border border-stone-200/80 space-y-2.5">
             <div className="flex items-start gap-2">
@@ -348,7 +253,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                   onChange={(e) => setAnswerInput(e.target.value)}
                   placeholder="Gõ đáp án vào đây..."
                   autoFocus
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || timerRemaining <= 0}
                   className="flex-1 px-3 py-2 rounded-lg border border-stone-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200 outline-none text-xs sm:text-sm font-medium bg-white text-stone-900"
                 />
                 <button
@@ -384,7 +289,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                   type="button"
                   onClick={() => {
                     sounds.playClick();
-                    onBuzz();
+                    void runAction(onBuzz);
                   }}
                   className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold text-sm shadow-md cursor-pointer transition-all flex items-center justify-center gap-2"
                 >
@@ -413,7 +318,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                   onChange={(e) => setAnswerInput(e.target.value)}
                   placeholder="Gõ đáp án nhanh..."
                   autoFocus
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || timerRemaining <= 0}
                   className="flex-1 px-3 py-2 rounded-lg border border-amber-300 focus:border-amber-600 focus:ring-1 focus:ring-amber-200 outline-none text-xs sm:text-sm font-semibold bg-white text-stone-900"
                 />
                 <button

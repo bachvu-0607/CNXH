@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { RoomState } from '../types/game';
 import { sounds } from '../utils/audio';
-import { togglePlayerReady } from '../firebase/roomService';
+import { setPlayerReady } from '../firebase/roomService';
 import {
   Users,
   Copy,
@@ -27,6 +27,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   onLeaveRoom,
   isStarting,
 }) => {
+  const [actionError, setActionError] = useState('');
+  const [isSavingReady, setIsSavingReady] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const isHost = room.hostId === myPlayerId;
@@ -51,9 +53,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleToggleReady = () => {
-    sounds.playClick();
-    togglePlayerReady(room.roomCode, myPlayerId);
+  const handleToggleReady = async () => {
+    if (isSavingReady) return;
+    setIsSavingReady(true);
+    setActionError('');
+    try {
+      const result = await setPlayerReady(room.roomCode, myPlayerId, !isMyPlayerReady);
+      if (!result.success) setActionError(result.message || 'Không lưu được trạng thái.');
+    } catch { setActionError('Mất kết nối. Vui lòng thử lại.'); }
+    finally { setIsSavingReady(false); }
   };
 
   return (
@@ -172,6 +180,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           )}
         </div>
 
+        {actionError && <p role="alert" className="text-xs text-rose-700">{actionError}</p>}
         {/* Khu vực hành động */}
         <div className="pt-1">
           {isHost ? (
@@ -196,6 +205,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           ) : myPlayer ? (
             <button
               onClick={handleToggleReady}
+              disabled={isSavingReady}
               className={`w-full py-2.5 rounded-xl font-semibold text-xs sm:text-sm shadow-xs cursor-pointer transition-all ${
                 isMyPlayerReady
                   ? 'bg-stone-200 hover:bg-stone-300 text-stone-800'

@@ -1,28 +1,11 @@
-# Security Specification: Hành Trình Làm Chủ Board Game
+# Security specification
 
-## 1. Data Invariants
-- A room document must have a valid `roomCode` matching `^[A-Z0-9]{4,10}$`.
-- The `hostId` must be a valid non-empty string.
-- Anonymous and authenticated users can create and join rooms.
-- Only room members can read and update the room state.
-- `players` array can hold at most 4 players.
-- Room status transitions follow the game lifecycle: `lobby` -> `playing` / `rolling` / `moving` / `evaluating` -> `finished`.
+Rooms contain one host (observer) and up to seven players. Firebase Anonymous Authentication must be enabled. Client-generated localStorage identities are not accepted as authentication.
 
-## 2. Dirty Dozen Security Attack Scenarios
-1. **Unauthenticated Read/Write**: Unauthenticated users cannot read or modify rooms.
-2. **Invalid Room Code**: Rejecting malformed or excessively long room codes.
-3. **Player List Flooding**: Attempting to add more than 4 players to a room.
-4. **Non-Member Tampering**: User not present in room `players` modifying game state.
-5. **Host Impersonation**: Non-host user attempting to start game or force Host evaluation.
-6. **Malicious State Hijack**: Forging negative scores or out-of-bound board positions (< 1 or > 24).
-7. **Dice Roll Manipulation**: Rolling dice when it is not the user's turn.
-8. **Double Evaluation**: Submitting multiple score updates for the same question.
-9. **Direct Winner Injection**: Forging winner field without completing the game lap or finishing evaluation.
-10. **Shadow Fields Injection**: Adding unauthorized schema properties to room doc.
-11. **Client Timestamp Spoofing**: Replacing server timestamps.
-12. **Premature Game Termination**: Forcing terminal status before game completes.
+All requests require Firebase authentication. An exact five-character room-code lookup is allowed for invitations; collection listing is denied. Only the host may delete a room, start/restart a game or skip an abandoned turn. A new player may only append their own authenticated UID in the lobby. Existing players may change their own name/readiness, use their own hints and leave. Joining, readiness, leaving and gameplay writes use transactions.
 
-## 3. Implementation Rules
-- Room read allowed for all authenticated/anonymous users participating or looking up room code.
-- Room create allowed for signed in user setting themselves as host and first player.
-- Room update allowed for active players with valid structure and bounded arrays.
+Rules keep host identity and creation time immutable, validate seven distinct player identities and bound player state. They restrict changed fields for each action, answer ownership, timestamps, movement and winner assignment. Members may resolve expired timers and completed results; their requests cannot change a new turn or a different question phase. Identity mapping and uniqueness are checked on every write. New players receive full schema validation; each action then validates exactly the fields it changes and preserves all others. Reset actions validate every reset value, movement checks board/lap bounds, readiness accepts only a boolean, and hints permit only a bounded decrement. This keeps seven-player updates within Firestore's rule-evaluation budget without dropping these invariants.
+
+The browser still selects the random dice and evaluates answers. These rules prevent outsiders and invalid state transitions; this is not a server-authoritative anti-cheat system against a player who rewrites their own browser code. Question answers are shipped with the educational game. A competitive deployment would need server-side dice, answer evaluation and private question data.
+
+Run `npm run test:rules` against the local demo emulator to verify allowed gameplay and denied malicious writes. Tests never use the production project. Deploy `firestore.rules` separately from the Vercel frontend; pushing Git does not deploy Firebase rules.
