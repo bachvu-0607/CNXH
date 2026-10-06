@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { RoomState } from '../types/game';
 import { sounds } from '../utils/audio';
+import { togglePlayerReady } from '../firebase/roomService';
 import {
   Users,
   Copy,
@@ -12,6 +13,8 @@ import {
   Share2,
   Info,
   Link2,
+  CheckCircle2,
+  Clock,
 } from 'lucide-react';
 
 interface LobbyScreenProps {
@@ -32,7 +35,12 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const isHost = room.hostId === myPlayerId;
-  const canStart = room.players.length >= 1; // Can start with 1+ teams for testing
+  const myPlayer = room.players.find((p) => p.id === myPlayerId);
+  const isMyPlayerReady = myPlayer?.isReady ?? false;
+
+  const totalPlayers = room.players.length;
+  const readyCount = room.players.filter((p) => p.isReady).length;
+  const canStart = totalPlayers >= 1; // Host can start
 
   const handleCopyCode = () => {
     sounds.playClick();
@@ -47,6 +55,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleToggleReady = () => {
+    sounds.playClick();
+    togglePlayerReady(room.roomCode, myPlayerId);
   };
 
   const handleStart = () => {
@@ -143,14 +156,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             <span className="flex items-center gap-1.5">
               <Users className="w-4 h-4 text-indigo-600" /> CÁC ĐỘI ĐÃ VÀO PHÒNG ({room.players.length}/4)
             </span>
-            <span className="flex items-center gap-1 text-emerald-600 font-bold">
-              <Radio className="w-3 h-3 animate-pulse" /> Sẵn sàng
+            <span className="flex items-center gap-1 text-slate-500 font-bold">
+              {readyCount}/{totalPlayers} đội đã sẵn sàng
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {room.players.map((player) => {
               const isMe = player.id === myPlayerId;
+              const isReady = player.isReady ?? false;
 
               return (
                 <div
@@ -174,6 +188,18 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       </p>
                     </div>
                   </div>
+
+                  <div>
+                    {isReady ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black border border-emerald-300">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Sẵn sàng
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold border border-slate-200">
+                        <Clock className="w-3 h-3 text-slate-400" /> Chờ
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -190,8 +216,31 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           </div>
         </div>
 
-        {/* Start Game Controls */}
-        <div className="space-y-2">
+        {/* Action Controls */}
+        <div className="space-y-3">
+          {/* Non-host player Ready toggle */}
+          {myPlayer && (
+            <button
+              onClick={handleToggleReady}
+              className={`w-full py-3 px-6 rounded-xl font-black text-sm tracking-wide shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer border ${
+                isMyPlayerReady
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
+              }`}
+            >
+              {isMyPlayerReady ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" /> BẠN ĐÃ SẴN SÀNG (Nhấn để hủy)
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" /> BẤM ĐỂ SẴN SÀNG THI ĐẤU
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Host Start Game Controls */}
           {isHost ? (
             <button
               onClick={handleStart}
@@ -210,7 +259,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               ) : (
                 <>
                   <Play className="w-5 h-5 text-amber-400 fill-current" />
-                  BẮT ĐẦU TRÒ CHƠI
+                  BẮT ĐẦU TRÒ CHƠI (QUẢN TRÒ)
                 </>
               )}
             </button>
@@ -218,7 +267,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             <div className="p-3.5 rounded-xl bg-slate-100 border border-slate-200 text-center">
               <p className="text-xs sm:text-sm font-bold text-slate-700 flex items-center justify-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
-                Đang chờ Quản trò ({room.hostName}) bấm Bắt đầu ván chơi...
+                Chờ Quản trò ({room.hostName}) bấm Bắt đầu sau khi các đội sẵn sàng...
               </p>
             </div>
           )}
@@ -227,7 +276,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         {/* Info */}
         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-center gap-1.5 text-xs text-slate-500 font-medium">
           <Info className="w-4 h-4 text-slate-400" />
-          <span>Game hỗ trợ 2-4 đội chơi. Mỗi ván kết thúc khi có đội hoàn thành 1 vòng.</span>
+          <span>Người chơi bấm Sẵn sàng → Quản trò bấm Bắt đầu trò chơi.</span>
         </div>
       </div>
     </div>

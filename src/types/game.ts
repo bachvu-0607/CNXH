@@ -31,6 +31,7 @@ export interface Player {
   avatar: string;
   position: number; // 1 - 24
   score: number;
+  isReady?: boolean;
   connected: boolean;
   completedLap: boolean;
   laps: number;

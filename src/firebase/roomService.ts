@@ -146,6 +146,7 @@ export async function joinRoom(
       avatar: colorConfig.avatar,
       position: 1,
       score: 0,
+      isReady: false,
       connected: true,
       completedLap: false,
       laps: 0,
@@ -158,6 +159,35 @@ export async function joinRoom(
     });
 
     return { success: true };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function togglePlayerReady(roomCode: string, playerId: string): Promise<void> {
+  const code = roomCode.trim().toUpperCase();
+  const path = `rooms/${code}`;
+
+  try {
+    const roomRef = doc(db, 'rooms', code);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const room = snap.data() as RoomState;
+    const updatedPlayers = room.players.map((p) => {
+      if (p.id === playerId) {
+        return {
+          ...p,
+          isReady: !p.isReady,
+        };
+      }
+      return p;
+    });
+
+    await updateDoc(roomRef, {
+      players: updatedPlayers,
+      updatedAt: serverTimestamp(),
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
