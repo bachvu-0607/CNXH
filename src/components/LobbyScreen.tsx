@@ -127,7 +127,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold text-stone-700">
             <span className="flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-emerald-700" /> Danh sách người chơi ({room.players.length}/4)
+              <Users className="w-3.5 h-3.5 text-emerald-700" /> Danh sách người chơi ({room.players.length}/7)
             </span>
           </div>
 
@@ -136,7 +136,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               Chưa có người chơi nào vào phòng. Vui lòng chia sẻ mã phòng hoặc link mời.
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-0.5">
               {room.players.map((player) => {
                 const isMe = player.id === myPlayerId;
                 const isReady = player.isReady ?? false;

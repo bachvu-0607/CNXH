@@ -20,6 +20,10 @@ export const PLAYER_COLORS = [
   { color: '#1D4ED8', name: 'Xanh dương', avatar: '🔵' },
   { color: '#047857', name: 'Xanh lá', avatar: '🟢' },
   { color: '#D97706', name: 'Vàng cam', avatar: '🟡' },
+  { color: '#7C3AED', name: 'Tím', avatar: '🟣' },
+  { color: '#0D9488', name: 'Xanh ngọc', avatar: '💎' },
+  { color: '#DB2777', name: 'Hồng', avatar: '🌸' },
+  { color: '#4F46E5', name: 'Chàm', avatar: '🔮' },
 ];
 
 function generateRoomCode(): string {
@@ -151,8 +155,8 @@ export async function joinRoom(
         return { success: false, message: 'Trò chơi đã bắt đầu, không thể tham gia.' };
       }
 
-      if (room.players.length >= 4) {
-        return { success: false, message: 'Phòng đã đủ 4 đội/người chơi.' };
+      if (room.players.length >= 7) {
+        return { success: false, message: 'Phòng đã đủ tối đa 7 người chơi.' };
       }
 
       const colorConfig = PLAYER_COLORS[room.players.length] || PLAYER_COLORS[0];
@@ -796,7 +800,7 @@ export async function addHostAsPlayer(
 
       const room = snap.data() as RoomState;
       if (room.players.some((p) => p.id === hostId)) return true;
-      if (room.players.length >= 4) return false;
+      if (room.players.length >= 7) return false;
 
       const colorConfig = PLAYER_COLORS[room.players.length] || PLAYER_COLORS[0];
       const newPlayer: Player = {

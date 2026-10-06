@@ -54,71 +54,73 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
             Đang chờ người chơi vào phòng...
           </div>
         ) : (
-          players.map((player, idx) => {
-            const isCurrentTurn = idx === currentPlayerIndex;
-            const isMe = player.id === myPlayerId;
-            const hintsRemaining = player.hintsRemaining ?? 2;
+          <div className="space-y-1.5 max-h-[360px] lg:max-h-[440px] overflow-y-auto pr-1">
+            {players.map((player, idx) => {
+              const isCurrentTurn = idx === currentPlayerIndex;
+              const isMe = player.id === myPlayerId;
+              const hintsRemaining = player.hintsRemaining ?? 2;
 
-            return (
-              <div
-                key={player.id}
-                className={`relative rounded-xl p-2.5 transition-all border ${
-                  isCurrentTurn
-                    ? 'bg-emerald-50/40 border-emerald-400 shadow-2xs'
-                    : 'bg-white border-stone-200/80'
-                }`}
-              >
-                {/* Badge đang có lượt */}
-                {isCurrentTurn && (
-                  <div
-                    style={{ backgroundColor: player.color }}
-                    className="absolute -top-1.5 right-2 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full shadow-2xs"
-                  >
-                    Đang có lượt
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
+              return (
+                <div
+                  key={player.id}
+                  className={`relative rounded-xl p-2 sm:p-2.5 transition-all border ${
+                    isCurrentTurn
+                      ? 'bg-emerald-50/50 border-emerald-400 shadow-2xs'
+                      : 'bg-white border-stone-200/80'
+                  }`}
+                >
+                  {/* Badge đang có lượt */}
+                  {isCurrentTurn && (
                     <div
                       style={{ backgroundColor: player.color }}
-                      className="w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0"
+                      className="absolute -top-1.5 right-2 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full shadow-2xs"
                     >
-                      {player.name.charAt(0).toUpperCase()}
+                      Đang có lượt
                     </div>
+                  )}
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1">
-                        <p className="text-xs font-bold text-stone-900 truncate">
-                          {player.name}
-                        </p>
-                        {isMe && (
-                          <span className="text-[9px] text-emerald-700 font-semibold">(Bạn)</span>
-                        )}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        style={{ backgroundColor: player.color }}
+                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs"
+                      >
+                        {player.name.charAt(0).toUpperCase()}
                       </div>
-                      <p className="text-[10px] text-stone-500 truncate" title={getSquareName(player.position)}>
-                        {player.position === 1 ? 'Khởi hành' : `Ô ${player.position}: ${getSquareName(player.position)}`}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
-                    <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-800">
-                      Ô {player.position}
-                    </span>
-                    <span className="text-[10px] text-stone-500 flex items-center gap-0.5">
-                      <Lightbulb className="w-2.5 h-2.5 text-amber-500" /> {hintsRemaining} gợi ý
-                    </span>
-                    {player.completedLap && (
-                      <span className="text-[9px] font-bold text-emerald-700 flex items-center gap-0.5">
-                        <Flag className="w-2.5 h-2.5" /> 1 vòng
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1">
+                          <p className="text-xs font-bold text-stone-900 truncate">
+                            {player.name}
+                          </p>
+                          {isMe && (
+                            <span className="text-[9px] text-emerald-700 font-semibold">(Bạn)</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-stone-500 truncate" title={getSquareName(player.position)}>
+                          {player.position === 1 ? 'Khởi hành' : `Ô ${player.position}: ${getSquareName(player.position)}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-800">
+                        Ô {player.position}
                       </span>
-                    )}
+                      <span className="text-[10px] text-stone-500 flex items-center gap-0.5">
+                        <Lightbulb className="w-2.5 h-2.5 text-amber-500" /> {hintsRemaining}
+                      </span>
+                      {player.completedLap && (
+                        <span className="text-[9px] font-bold text-emerald-700 flex items-center gap-0.5">
+                          <Flag className="w-2.5 h-2.5" /> 1 vòng
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

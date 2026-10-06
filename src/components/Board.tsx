@@ -107,8 +107,8 @@ export const Board: React.FC<BoardProps> = ({
                 </p>
               </div>
 
-              {/* Quân cờ của người chơi */}
-              <div className="h-4 sm:h-5 flex items-center justify-center gap-1">
+              {/* Quân cờ của người chơi (hỗ trợ tối đa 7 người chơi) */}
+              <div className="h-4 sm:h-5 flex items-center justify-center -space-x-1 sm:-space-x-1.5 overflow-visible px-0.5">
                 {playersHere.map((p, pIdx) => {
                   const isActive = activePlayer?.id === p.id;
                   return (
@@ -117,10 +117,10 @@ export const Board: React.FC<BoardProps> = ({
                       title={`${p.name} (Ô ${p.position})`}
                       style={{
                         backgroundColor: p.color,
-                        transform: `translate(${pIdx * 2}px, 0)`,
+                        zIndex: isActive ? 15 : 10 - pIdx,
                       }}
-                      className={`relative w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-white shadow-xs flex items-center justify-center text-[9px] sm:text-[10px] text-white font-bold transition-transform ${
-                        isActive ? 'ring-2 ring-emerald-400 animate-bounce' : ''
+                      className={`relative w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-white shadow-2xs flex items-center justify-center text-[8px] sm:text-[9px] text-white font-black shrink-0 transition-transform ${
+                        isActive ? 'ring-2 ring-emerald-400 -translate-y-1 scale-110 z-20' : 'hover:scale-110 hover:z-20'
                       }`}
                     >
                       <span>{p.name.charAt(0).toUpperCase()}</span>
