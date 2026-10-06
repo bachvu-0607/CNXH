@@ -11,6 +11,8 @@ export interface Question {
   id: string;
   text: string;
   answer: string;
+  answerTemplate?: string;
+  keyword?: string;
   hint?: string;
   acceptedAnswers?: string[];
   explanation?: string;
@@ -53,6 +55,8 @@ export interface CurrentQuestionState {
   questionIndex: number;
   questionText: string;
   officialAnswer: string;
+  answerTemplate?: string;
+  keyword?: string;
   acceptedAnswers?: string[];
   category: CategoryType;
   squareName: string;

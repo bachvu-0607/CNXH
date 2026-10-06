@@ -120,7 +120,35 @@ export function isAnswerCorrect(
       return true;
     }
 
-    // 6. Semantic keyword matching:
+    // 6. List & Enumeration Permutation Matching:
+    // If the target answer is a list of items (e.g. "kinh tế; chính trị; xã hội", "kỷ luật; kỷ cương", "vật chất và tinh thần"),
+    // check if user provided all items regardless of ordering!
+    const listDelimiters = /[;,/–\-]|\s+(?:và|va)\s+/;
+    const rawItems = acc
+      .split(listDelimiters)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (rawItems.length >= 2) {
+      const allItemsMatched = rawItems.every((item) => {
+        const normItem = removeDiacritics(normalizeText(item));
+        const itemWords = extractKeywords(item);
+        if (normItem.length >= 2 && (normUserNoAccent.includes(normItem) || normUserExpanded.includes(normItem))) {
+          return true;
+        }
+        if (itemWords.length > 0) {
+          const userKeywords = new Set(extractKeywords(userAnswer));
+          return itemWords.every((w) => userKeywords.has(w));
+        }
+        return false;
+      });
+
+      if (allItemsMatched) {
+        return true;
+      }
+    }
+
+    // 7. Semantic keyword matching:
     // Check if the user answer contains the key nouns/verbs of the official answer
     const userKeywords = new Set(extractKeywords(userAnswer));
     const targetKeywords = extractKeywords(acc);

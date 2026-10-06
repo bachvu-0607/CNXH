@@ -392,12 +392,22 @@ export async function rollDice(roomCode: string, playerId: string): Promise<void
       const newUsedKey = `${projectedTarget}_${selectedQuestionIdx}`;
       const nextUsedQuestionKeys = Array.from(new Set([...(room.usedQuestionKeys || []), newUsedKey]));
 
+      const allAcceptedAnswers = Array.from(
+        new Set([
+          chosenQuestion.answer,
+          ...(chosenQuestion.acceptedAnswers || []),
+          ...(chosenQuestion.keyword ? [chosenQuestion.keyword, chosenQuestion.keyword.replace(/;/g, ' '), chosenQuestion.keyword.replace(/;/g, ',')] : []),
+        ])
+      );
+
       const questionState: CurrentQuestionState = {
         squareId: targetSquare.id,
         questionIndex: selectedQuestionIdx,
         questionText: chosenQuestion.text,
         officialAnswer: chosenQuestion.answer,
-        acceptedAnswers: chosenQuestion.acceptedAnswers || [chosenQuestion.answer],
+        answerTemplate: chosenQuestion.answerTemplate,
+        keyword: chosenQuestion.keyword,
+        acceptedAnswers: allAcceptedAnswers,
         category: targetSquare.category,
         squareName: targetSquare.name,
         phase: 'active_answering',
