@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CurrentQuestionState, Player } from '../types/game';
 import { CATEGORY_CONFIG } from '../questions/boardData';
-import { getAnswerWordMasks } from '../utils/answerLength';
+import { getAnswerWordLengths, getAnswerWordMasks } from '../utils/answerLength';
 import { sounds } from '../utils/audio';
 import {
   CheckCircle2,
@@ -47,7 +47,9 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   const [resultCountdown, setResultCountdown] = useState<number>(3);
   const [timerRemaining, setTimerRemaining] = useState<number>(60);
   const config = CATEGORY_CONFIG[currentQuestion.category] || CATEGORY_CONFIG.knowledge;
+  const answerWordLengths = getAnswerWordLengths(currentQuestion.officialAnswer);
   const answerWordMasks = getAnswerWordMasks(currentQuestion.officialAnswer);
+  const totalAnswerLetters = answerWordLengths.reduce((total, length) => total + length, 0);
   const isMainPlayer = myPlayerId === currentQuestion.activePlayerId;
   const stealerPlayer = players.find((p) => p.id === currentQuestion.stolenByPlayerId);
   const isStealer = myPlayerId === currentQuestion.stolenByPlayerId;
@@ -213,14 +215,15 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
               </p>
             </div>
 
-            {/* Gạch dưới thể hiện độ dài từng từ trong đáp án */}
+            {/* Tổng số chữ và gạch dưới theo từng từ */}
             {answerWordMasks.length > 0 && (
               <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200/80 flex items-start gap-2">
                 <span className="px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[10px] font-bold shrink-0 mt-0.5">
                   Mẫu đáp án
                 </span>
-                <p aria-label={`Mẫu đáp án gồm ${answerWordMasks.map(mask => mask.split(' ').length).join(' và ')} chữ cái theo từng từ`}
-                  className="flex flex-wrap gap-x-5 gap-y-1 text-sm sm:text-base font-semibold text-emerald-950 font-mono tracking-wide leading-relaxed">
+                <p aria-label={`Tổng ${totalAnswerLetters} chữ cái: ${answerWordMasks.join(' ')}`}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm sm:text-base font-semibold text-emerald-950 font-mono tracking-wide leading-relaxed">
+                  <span>Tổng {totalAnswerLetters} chữ:</span>
                   {answerWordMasks.map((mask, index) => (
                     <span key={`${index}-${mask}`} className="whitespace-nowrap">{mask}</span>
                   ))}

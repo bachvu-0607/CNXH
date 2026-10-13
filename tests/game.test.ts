@@ -182,14 +182,16 @@ test('question bank keeps unique question IDs', () => {
   const ids = BOARD_SQUARES.flatMap(square => square.questions.map(question => question.id));
   assert.equal(new Set(ids).size, ids.length);
 });
-test('answer length hints count letters in each word', () => {
+test('answer template shows total letters and groups matching blanks by word', () => {
   for (const square of BOARD_SQUARES) for (const question of square.questions) {
     const lengths = getAnswerWordLengths(question.answer);
     const expected = question.answer.normalize('NFC').match(/[\p{L}\p{N}]+/gu) || [];
     assert.deepEqual(lengths, expected.map(word => Array.from(word).length), question.id);
+    assert.deepEqual(getAnswerWordMasks(question.answer), lengths.map(length => '_'.repeat(length)), question.id);
   }
   assert.deepEqual(getAnswerWordLengths('Pháp luật'), [4, 4]);
-  assert.deepEqual(getAnswerWordMasks('Giá trị'), ['_ _ _', '_ _ _']);
+  assert.equal(getAnswerWordLengths('Giá trị').reduce((total, length) => total + length, 0), 6);
+  assert.deepEqual(getAnswerWordMasks('Giá trị'), ['___', '___']);
 });
 test('host can recover abandoned roll/open/bonus phases, others cannot skip', () => {
   let state = room();

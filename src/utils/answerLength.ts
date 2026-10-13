@@ -4,5 +4,5 @@ export function getAnswerWordLengths(answer: string): number[] {
 }
 
 export function getAnswerWordMasks(answer: string): string[] {
-  return getAnswerWordLengths(answer).map(length => Array.from({ length }, () => '_').join(' '));
+  return getAnswerWordLengths(answer).map(length => Array.from({ length }, () => '_').join(''));
 }
