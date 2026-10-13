@@ -1,6 +1,7 @@
 import type { RoomState, Player, QuestionPhase } from '../types/game';
 import { BOARD_SQUARES } from '../questions/boardData';
 import { isAnswerCorrect } from '../utils/answerChecker';
+import { createAnswerMask } from '../utils/answerTemplate';
 
 export const MAX_PLAYERS = 7;
 export const MAIN_ANSWER_MS = 60_000;
@@ -46,11 +47,12 @@ export function applyGameAction(source: RoomState, actorId: string, action: Game
   context: Context = { now: Date.now(), random: Math.random, newId: () => crypto.randomUUID() },
 ): ActionResult {
   const { now, random, newId } = context;
-  const reject = (message = 'Lượt chơi đã thay đổi hoặc bạn không có quyền thực hiện thao tác này.'): ActionResult => ({ success: false, message });
+  const reject = (message = 'Thao tác chưa được áp dụng. Hãy chờ phòng đồng bộ rồi thử lại.'): ActionResult => ({ success: false, message });
   const host = actorId === source.hostId;
   const member = source.players.some(p => p.id === actorId);
-  if (!actorId || (!host && !member && action.type !== 'join')) return reject();
-  if ('turnId' in action && action.turnId !== (source.turnId || 'legacy')) return reject();
+  if (!actorId || (!host && !member && action.type !== 'join')) return reject('Bạn không có quyền thực hiện thao tác này.');
+  if ('turnId' in action && action.turnId !== (source.turnId || 'legacy'))
+    return reject('Kết nối đang chậm nên thao tác vừa gửi đã cũ. Phòng đang đồng bộ; hãy chờ một chút rồi thử lại.');
   const room: RoomState = { ...source, players: source.players.map(p => ({ ...p })),
     currentQuestion: source.currentQuestion ? { ...source.currentQuestion } : null,
     turnId: source.turnId || 'legacy' };
@@ -187,7 +189,7 @@ export function applyGameAction(source: RoomState, actorId: string, action: Game
     const index = indices[Math.floor(random() * indices.length)];
     const question = square.questions[index];
     room.currentQuestion = { squareId: target, questionIndex: index, questionText: question.text,
-      officialAnswer: question.answer, answerTemplate: question.answerTemplate || '', keyword: question.keyword || '',
+      officialAnswer: question.answer, answerTemplate: createAnswerMask(question.answer), keyword: question.keyword || '',
       acceptedAnswers: question.acceptedAnswers || [], category: square.category, squareName: square.name,
       phase: 'active_answering', phaseStartedAt: now, activePlayerId: active.id, originalDiceValue: dice,
       targetPosition: target, stolenByPlayerId: null, stealStartTime: null, questionStartTime: null,

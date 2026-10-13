@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { applyGameAction, type GameAction } from '../src/game/engine';
 import { isAnswerCorrect } from '../src/utils/answerChecker';
 import { BOARD_SQUARES } from '../src/questions/boardData';
+import { createAnswerMask } from '../src/utils/answerTemplate';
 import { room, player } from './fixtures';
 import type { RoomState } from '../src/types/game';
 
@@ -89,7 +90,9 @@ test('wrong sender, late answers, duplicate answers and stale phases are rejecte
   state = close(state);
   assert.equal(state.players[1].position,4);
   assert.equal(state.currentPlayerIndex,1);
-  assert.equal(applyGameAction(state,'b',{type:'close',turnId:'turn-1',phase:'showing_result'},ctx()).success,false);
+  const staleAction = applyGameAction(state,'b',{type:'close',turnId:'turn-1',phase:'showing_result'},ctx());
+  assert.equal(staleAction.success,false);
+  assert.match(staleAction.message || '', /Kết nối đang chậm/);
 });
 test('host can accept an unmatched synonym or reject it to open the steal window', () => {
   let state = answer(questionRoom(),'a','a valid synonym the matcher does not know');
@@ -178,6 +181,14 @@ test('answer checker rejects false positives and preserves all curated alternati
 test('question bank keeps unique question IDs', () => {
   const ids = BOARD_SQUARES.flatMap(square => square.questions.map(question => question.id));
   assert.equal(new Set(ids).size, ids.length);
+});
+test('answer templates use one blank for every answer letter and digit', () => {
+  for (const square of BOARD_SQUARES) for (const question of square.questions) {
+    const mask = createAnswerMask(question.answer);
+    const answerLength = Array.from(question.answer.normalize('NFC')).filter(character => /[\p{L}\p{N}]/u.test(character)).length;
+    assert.equal((mask.match(/_/g) || []).length, answerLength, question.id);
+  }
+  assert.equal(createAnswerMask('Pháp luật'), '____ ____');
 });
 test('host can recover abandoned roll/open/bonus phases, others cannot skip', () => {
   let state = room();

@@ -54,6 +54,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const [isRollingDice, setIsRollingDice] = useState(false);
 
   const isHost = room.hostId === myPlayerId;
+  useEffect(() => { setActionError(''); }, [turnId, room.status]);
   const activePlayer = room.players[room.currentPlayerIndex] || room.players[0];
   const questionActivePlayer =
     room.players.find((p) => p.id === room.currentQuestion?.activePlayerId) || activePlayer;
