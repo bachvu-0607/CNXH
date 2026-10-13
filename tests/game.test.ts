@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { applyGameAction, type GameAction } from '../src/game/engine';
 import { isAnswerCorrect } from '../src/utils/answerChecker';
 import { BOARD_SQUARES } from '../src/questions/boardData';
-import { createAnswerMask } from '../src/utils/answerTemplate';
+import { getAnswerWordLengths } from '../src/utils/answerLength';
 import { room, player } from './fixtures';
 import type { RoomState } from '../src/types/game';
 
@@ -182,13 +182,13 @@ test('question bank keeps unique question IDs', () => {
   const ids = BOARD_SQUARES.flatMap(square => square.questions.map(question => question.id));
   assert.equal(new Set(ids).size, ids.length);
 });
-test('answer templates use one blank for every answer letter and digit', () => {
+test('answer length hints count letters in each word', () => {
   for (const square of BOARD_SQUARES) for (const question of square.questions) {
-    const mask = createAnswerMask(question.answer);
-    const answerLength = Array.from(question.answer.normalize('NFC')).filter(character => /[\p{L}\p{N}]/u.test(character)).length;
-    assert.equal((mask.match(/_/g) || []).length, answerLength, question.id);
+    const lengths = getAnswerWordLengths(question.answer);
+    const expected = question.answer.normalize('NFC').match(/[\p{L}\p{N}]+/gu) || [];
+    assert.deepEqual(lengths, expected.map(word => Array.from(word).length), question.id);
   }
-  assert.equal(createAnswerMask('Pháp luật'), '____ ____');
+  assert.deepEqual(getAnswerWordLengths('Pháp luật'), [4, 4]);
 });
 test('host can recover abandoned roll/open/bonus phases, others cannot skip', () => {
   let state = room();

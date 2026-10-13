@@ -1,7 +1,6 @@
 import type { RoomState, Player, QuestionPhase } from '../types/game';
 import { BOARD_SQUARES } from '../questions/boardData';
 import { isAnswerCorrect } from '../utils/answerChecker';
-import { createAnswerMask } from '../utils/answerTemplate';
 
 export const MAX_PLAYERS = 7;
 export const MAIN_ANSWER_MS = 60_000;
@@ -189,7 +188,7 @@ export function applyGameAction(source: RoomState, actorId: string, action: Game
     const index = indices[Math.floor(random() * indices.length)];
     const question = square.questions[index];
     room.currentQuestion = { squareId: target, questionIndex: index, questionText: question.text,
-      officialAnswer: question.answer, answerTemplate: createAnswerMask(question.answer), keyword: question.keyword || '',
+      officialAnswer: question.answer, answerTemplate: question.answerTemplate || '', keyword: question.keyword || '',
       acceptedAnswers: question.acceptedAnswers || [], category: square.category, squareName: square.name,
       phase: 'active_answering', phaseStartedAt: now, activePlayerId: active.id, originalDiceValue: dice,
       targetPosition: target, stolenByPlayerId: null, stealStartTime: null, questionStartTime: null,
