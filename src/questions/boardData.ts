@@ -174,7 +174,7 @@ export const BOARD_SQUARES: BoardSquare[] = [
     questions: [
       {
         id: 'q005',
-        text: 'Trong các lĩnh vực dân chủ, lĩnh vực nào được coi là cơ sở?',
+        text: 'Trong các lĩnh vực dân chủ, lĩnh vực nào là cơ sở quyết định nhất?',
         answerTemplate: 'Lĩnh vực ____',
         keyword: 'kinh tế',
         hint: 'Lĩnh vực k___ t_',
@@ -207,6 +207,36 @@ export const BOARD_SQUARES: BoardSquare[] = [
         hint: 'Một đ___ l__ c_ b__ thúc đẩy phát triển kinh tế – xã hội',
         answer: 'Động lực cơ bản',
         acceptedAnswers: ['động lực cơ bản'],
+      },
+      {
+        id: 'q093', text: 'Thành phần kinh tế nào giữ vai trò chủ đạo cùng với kinh tế tập thể?',
+        answerTemplate: 'Kinh tế ____', keyword: 'nhà nước', hint: 'K___ t_ nh_ n___',
+        answer: 'Kinh tế nhà nước', acceptedAnswers: ['kinh tế nhà nước'],
+      },
+      {
+        id: 'q094', text: 'Cải tạo nông nghiệp trong thời kỳ quá độ được thực hiện theo con đường nào?',
+        answerTemplate: '____', keyword: 'hợp tác xã', hint: 'H__ t__ x_',
+        answer: 'Hợp tác xã', acceptedAnswers: ['hợp tác xã'],
+      },
+      {
+        id: 'q095', text: 'Nhiệm vụ trung tâm của thời kỳ quá độ lên chủ nghĩa xã hội là gì?',
+        answerTemplate: '____', keyword: 'công nghiệp hóa', hint: 'C___ n____p h__',
+        answer: 'Công nghiệp hóa', acceptedAnswers: ['công nghiệp hóa', 'công nghiệp hoá'],
+      },
+      {
+        id: 'q096', text: 'Nền kinh tế thị trường ở Việt Nam mang định hướng gì?',
+        answerTemplate: '____', keyword: 'xã hội chủ nghĩa', hint: 'X_ h___ c___ n___a',
+        answer: 'Xã hội chủ nghĩa', acceptedAnswers: ['xã hội chủ nghĩa'],
+      },
+      {
+        id: 'q097', text: 'Theo chủ nghĩa xã hội, sản phẩm được phân phối chủ yếu theo nguyên tắc nào?',
+        answerTemplate: 'Theo ____', keyword: 'lao động', hint: 'T___ l___ đ___',
+        answer: 'Theo lao động', acceptedAnswers: ['theo lao động', 'phân phối theo lao động'],
+      },
+      {
+        id: 'q098', text: 'Chế độ sở hữu đối với tư liệu sản xuất chủ yếu trong xã hội chủ nghĩa là gì?',
+        answerTemplate: '____', keyword: 'công hữu', hint: 'C___ h___',
+        answer: 'Công hữu', acceptedAnswers: ['công hữu'],
       },
     ],
   },
@@ -252,6 +282,21 @@ export const BOARD_SQUARES: BoardSquare[] = [
         answer: 'Pháp luật',
         acceptedAnswers: ['pháp luật', 'khuôn khổ pháp luật'],
       },
+      {
+        id: 'q099', text: 'Theo giáo trình, Nhà nước pháp quyền là Nhà nước như thế nào đối với pháp luật?',
+        answerTemplate: 'Thượng tôn ____', keyword: 'pháp luật', hint: 'T______ p____ l____',
+        answer: 'Thượng tôn pháp luật', acceptedAnswers: ['thượng tôn pháp luật'],
+      },
+      {
+        id: 'q100', text: 'Mọi công dân có nghĩa vụ gì đối với Hiến pháp và pháp luật?',
+        answerTemplate: '____ Hiến pháp và pháp luật', keyword: 'chấp hành', hint: 'C___ h____',
+        answer: 'Chấp hành', acceptedAnswers: ['chấp hành'],
+      },
+      {
+        id: 'q101', text: 'Nhà nước pháp quyền xã hội chủ nghĩa được tổ chức và hoạt động trên cơ sở nào?',
+        answerTemplate: '____ và ____', keyword: 'Hiến pháp; pháp luật', hint: 'H___ p___ v_ p___ l___',
+        answer: 'Hiến pháp và pháp luật', acceptedAnswers: ['hiến pháp và pháp luật', 'pháp luật và hiến pháp'],
+      },
     ],
   },
   {
@@ -295,6 +340,16 @@ export const BOARD_SQUARES: BoardSquare[] = [
         hint: 'K__ q__ lao động',
         answer: 'Kết quả',
         acceptedAnswers: ['kết quả', 'kết quả lao động'],
+      },
+      {
+        id: 'q115', text: 'Trong cuộc họp khu phố, người dân góp ý và giám sát công việc chung. Họ vừa là chủ vừa thực hiện quyền gì?',
+        answerTemplate: 'Dân là chủ, dân ____', keyword: 'làm chủ', hint: 'L__ c__',
+        answer: 'Làm chủ', acceptedAnswers: ['làm chủ', 'dân làm chủ'],
+      },
+      {
+        id: 'q117', text: 'Người lao động tham gia công đoàn để bảo vệ quyền lợi hợp pháp đang thực hiện điều gì của giai cấp công nhân?',
+        answerTemplate: '____ lịch sử', keyword: 'sứ mệnh', hint: 'S_ m____ l___ s_',
+        answer: 'Sứ mệnh lịch sử', acceptedAnswers: ['sứ mệnh lịch sử'],
       },
     ],
   },
@@ -384,6 +439,26 @@ export const BOARD_SQUARES: BoardSquare[] = [
         answer: 'Nhân dân',
         acceptedAnswers: ['nhân dân'],
       },
+      {
+        id: 'q108', text: 'Trong giai đoạn 1936–1939, cuộc vận động hướng tới tự do, cơm áo, hòa bình và gì?',
+        answerTemplate: '____', keyword: 'dân chủ', hint: 'D__ c__',
+        answer: 'Dân chủ', acceptedAnswers: ['dân chủ'],
+      },
+      {
+        id: 'q109', text: 'Nguyên tắc tổ chức cơ bản của Đảng Cộng sản Việt Nam là gì?',
+        answerTemplate: '____ ____', keyword: 'tập trung; dân chủ', hint: 'T__ tr____ d__ ch_',
+        answer: 'Tập trung dân chủ', acceptedAnswers: ['tập trung dân chủ'],
+      },
+      {
+        id: 'q110', text: 'Nhân dân còn có quyền tham gia xây dựng ____ và pháp luật của Nhà nước.',
+        answerTemplate: '____ và pháp luật', keyword: 'chính sách', hint: 'C___ s___',
+        answer: 'Chính sách', acceptedAnswers: ['chính sách'],
+      },
+      {
+        id: 'q125', text: 'Dân chủ được thực hiện thông qua hai hình thức: dân chủ gián tiếp và dân chủ nào?',
+        answerTemplate: 'Dân chủ ____', keyword: 'trực tiếp', hint: 'D__ c__ tr___ t___',
+        answer: 'Dân chủ trực tiếp', acceptedAnswers: ['dân chủ trực tiếp', 'trực tiếp'],
+      },
     ],
   },
   {
@@ -433,6 +508,36 @@ export const BOARD_SQUARES: BoardSquare[] = [
         hint: 'Từ th__ đến c__',
         answer: 'Thấp đến cao',
         acceptedAnswers: ['thấp đến cao', 'từ thấp đến cao', 'thấp cao'],
+      },
+      {
+        id: 'q102', text: 'Dân chủ thay đổi theo điều kiện của từng thời kỳ; vì vậy dân chủ là một ____.',
+        answerTemplate: 'Phạm trù ____', keyword: 'lịch sử', hint: 'Phạm trù l___ s_',
+        answer: 'Phạm trù lịch sử', acceptedAnswers: ['phạm trù lịch sử'],
+      },
+      {
+        id: 'q103', text: 'Dân chủ chủ nô, dân chủ tư sản và dân chủ xã hội chủ nghĩa là các hình thức dân chủ nào?',
+        answerTemplate: 'Dân chủ ____', keyword: 'xã hội chủ nghĩa', hint: 'X_ h__ c__ n____',
+        answer: 'Xã hội chủ nghĩa', acceptedAnswers: ['xã hội chủ nghĩa'],
+      },
+      {
+        id: 'q104', text: 'Thời kỳ quá độ là sự cải biến từ xã hội nào sang xã hội xã hội chủ nghĩa?',
+        answerTemplate: 'Xã hội ____', keyword: 'tư bản chủ nghĩa', hint: 'T___ b___ c___ n___',
+        answer: 'Tư bản chủ nghĩa', acceptedAnswers: ['tư bản chủ nghĩa'],
+      },
+      {
+        id: 'q105', text: 'Theo chủ nghĩa Mác – Lênin, lực lượng quyết định trong sáng tạo lịch sử là ai?',
+        answerTemplate: '____', keyword: 'quần chúng nhân dân', hint: 'Q___ c___ n___ d___',
+        answer: 'Quần chúng nhân dân', acceptedAnswers: ['quần chúng nhân dân'],
+      },
+      {
+        id: 'q106', text: 'Cùng với chủ nghĩa Mác – Lênin, yếu tố nào là nền tảng tư tưởng và kim chỉ nam cho hành động của Đảng?',
+        answerTemplate: 'Tư tưởng ____', keyword: 'Hồ Chí Minh', hint: 'T_ t____ H_ C___ M___',
+        answer: 'Tư tưởng Hồ Chí Minh', acceptedAnswers: ['tư tưởng hồ chí minh'],
+      },
+      {
+        id: 'q116', text: 'Nền dân chủ xã hội chủ nghĩa ra đời gắn với thắng lợi cách mạng của giai cấp vô sản và lực lượng nào?',
+        answerTemplate: 'Giai cấp vô sản và ____', keyword: 'nhân dân lao động', hint: 'N___ d__ l__ đ___',
+        answer: 'Nhân dân lao động', acceptedAnswers: ['nhân dân lao động'],
       },
     ],
   },
@@ -521,6 +626,11 @@ export const BOARD_SQUARES: BoardSquare[] = [
         hint: 'Tinh hoa văn hóa d__ t__',
         answer: 'Dân tộc',
         acceptedAnswers: ['dân tộc', 'tinh hoa văn hóa dân tộc'],
+      },
+      {
+        id: 'q118', text: 'Ba nhiệm vụ cấp bách năm 1945 gồm diệt giặc đói, diệt giặc ngoại xâm và diệt giặc gì?',
+        answerTemplate: 'Diệt giặc ____', keyword: 'dốt', hint: 'D__ g___ d___',
+        answer: 'Diệt giặc dốt', acceptedAnswers: ['diệt giặc dốt', 'giặc dốt'],
       },
     ],
   },
@@ -654,6 +764,16 @@ export const BOARD_SQUARES: BoardSquare[] = [
         answer: 'Đời sống xã hội',
         acceptedAnswers: ['đời sống xã hội'],
       },
+      {
+        id: 'q113', text: 'Cương lĩnh chính trị đầu tiên của Đảng xác định lực lượng lãnh đạo cách mạng giải phóng dân tộc là giai cấp nào?',
+        answerTemplate: 'Giai cấp ____', keyword: 'công nhân', hint: 'G___ c__ c____ nh__',
+        answer: 'Giai cấp công nhân', acceptedAnswers: ['giai cấp công nhân', 'công nhân'],
+      },
+      {
+        id: 'q107', text: 'Theo chủ nghĩa xã hội khoa học, giai cấp giữ vai trò lãnh đạo cách mạng xã hội chủ nghĩa là giai cấp nào?',
+        answerTemplate: 'Giai cấp ____', keyword: 'công nhân', hint: 'G___ c___ c___ n___',
+        answer: 'Giai cấp công nhân', acceptedAnswers: ['giai cấp công nhân', 'công nhân'],
+      },
     ],
   },
   {
@@ -742,6 +862,11 @@ export const BOARD_SQUARES: BoardSquare[] = [
         answer: 'Mác – Lênin',
         acceptedAnswers: ['mác lênin', 'chủ nghĩa mác lênin', 'mác - lênin'],
       },
+      {
+        id: 'q111', text: 'Sau khi thành lập nước năm 1945, phong trào nào được phát động để nâng cao dân trí, xóa nạn mù chữ?',
+        answerTemplate: '____ ____ ____', keyword: 'bình dân học vụ', hint: 'B____ d__ h__ v_',
+        answer: 'Bình dân học vụ', acceptedAnswers: ['bình dân học vụ'],
+      },
     ],
   },
   {
@@ -785,6 +910,11 @@ export const BOARD_SQUARES: BoardSquare[] = [
         hint: 'Sự lãnh đạo của Đ___ C___ s__',
         answer: 'Đảng Cộng sản',
         acceptedAnswers: ['đảng cộng sản', 'đảng cộng sản việt nam'],
+      },
+      {
+        id: 'q112', text: 'Chủ tịch Hồ Chí Minh khẳng định: “Đảng ta là đạo đức, là ____.”',
+        answerTemplate: '____', keyword: 'văn minh', hint: 'V__ m____',
+        answer: 'Văn minh', acceptedAnswers: ['văn minh'],
       },
     ],
   },
@@ -981,8 +1111,8 @@ export const BOARD_SQUARES: BoardSquare[] = [
     questions: [
       {
         id: 'q077',
-        text: 'Góp ý dự thảo chính sách, pháp luật thể hiện quyền tham gia hoạt động nào?',
-        answerTemplate: 'Tham gia ____ nhà nước',
+        text: 'Dân chủ xã hội chủ nghĩa tạo điều kiện để nhân dân tham gia hoạt động nào của nhà nước và xã hội?',
+        answerTemplate: 'Tham gia ____ nhà nước, quản lý xã hội',
         keyword: 'quản lý',
         hint: 'Tham gia q___ l_ nhà nước',
         answer: 'Quản lý',
@@ -1014,6 +1144,11 @@ export const BOARD_SQUARES: BoardSquare[] = [
         hint: 'Pháp luật, k_ l___ và k_ c____',
         answer: 'Kỷ luật và kỷ cương',
         acceptedAnswers: ['kỷ luật và kỷ cương', 'kỷ cương và kỷ luật', 'kỷ luật kỷ cương'],
+      },
+      {
+        id: 'q114', text: 'Nhà nước pháp quyền xã hội chủ nghĩa ở Việt Nam là Nhà nước của ai, do ai và vì ai?',
+        answerTemplate: '____, ____ và ____', keyword: 'dân; do dân; vì dân', hint: 'D__, d_ d__, v_ d__',
+        answer: 'Dân, do dân, vì dân', acceptedAnswers: ['dân do dân vì dân', 'của dân do dân vì dân'],
       },
     ],
   },
@@ -1107,6 +1242,31 @@ export const BOARD_SQUARES: BoardSquare[] = [
         answer: 'Dân chủ và pháp luật',
         acceptedAnswers: ['dân chủ và pháp luật', 'pháp luật và dân chủ', 'dân chủ pháp luật'],
       },
+      {
+        id: 'q119', text: 'Một nền kinh tế có cả khu vực nhà nước và tư nhân cùng phát triển là đặc trưng của giai đoạn nào?',
+        answerTemplate: 'Thời kỳ ____', keyword: 'quá độ', hint: 'T___ k_ q___ đ_',
+        answer: 'Thời kỳ quá độ', acceptedAnswers: ['thời kỳ quá độ', 'quá độ lên chủ nghĩa xã hội'],
+      },
+      {
+        id: 'q120', text: 'Người dân bầu tổ trưởng khu phố và giám sát thu chi đang thực hiện quyền gì?',
+        answerTemplate: 'Quyền ____', keyword: 'dân chủ', hint: 'D__ c__',
+        answer: 'Dân chủ', acceptedAnswers: ['dân chủ', 'quyền dân chủ'],
+      },
+      {
+        id: 'q121', text: 'Khi tham gia giao thông và làm việc, mọi người phải nghiêm chỉnh tuân thủ điều gì?',
+        answerTemplate: '____', keyword: 'pháp luật', hint: 'Ph__ l____',
+        answer: 'Pháp luật', acceptedAnswers: ['pháp luật'],
+      },
+      {
+        id: 'q122', text: 'Chính sách hỗ trợ đồng bào vùng cao nhằm thực hiện sự ____ giữa các dân tộc.',
+        answerTemplate: 'Sự ____', keyword: 'bình đẳng', hint: 'B_____ đ____',
+        answer: 'Bình đẳng', acceptedAnswers: ['bình đẳng'],
+      },
+      {
+        id: 'q123', text: 'Liên minh giữa công nhân, nông dân và đội ngũ nào là nền tảng quan trọng của khối đại đoàn kết?',
+        answerTemplate: 'Đội ngũ ____', keyword: 'trí thức', hint: 'Tr_ th___',
+        answer: 'Trí thức', acceptedAnswers: ['trí thức', 'tri thức', 'đội ngũ trí thức'],
+      },
     ],
   },
   {
@@ -1150,6 +1310,11 @@ export const BOARD_SQUARES: BoardSquare[] = [
         hint: 'Giải phóng ng___ l__ đ___',
         answer: 'Người lao động',
         acceptedAnswers: ['người lao động', 'giải phóng người lao động'],
+      },
+      {
+        id: 'q124', text: 'Mục tiêu cao nhất của chủ nghĩa xã hội gồm giải phóng giai cấp, dân tộc, xã hội và giải phóng ai?',
+        answerTemplate: 'Giải phóng ____', keyword: 'con người', hint: 'C__ ng____',
+        answer: 'Con người', acceptedAnswers: ['con người', 'giải phóng con người'],
       },
     ],
   },

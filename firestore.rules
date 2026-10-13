@@ -54,7 +54,7 @@ service cloud.firestore {
         && (count == 0 ? data.currentPlayerIndex == 0 : data.currentPlayerIndex < count)
         && data.status in ['lobby','playing','moving','question','bonus_roll','finished']
         && data.turnId is string && data.turnId.size() > 0 && data.turnId.size() <= 128
-        && data.usedQuestionKeys is list && data.usedQuestionKeys.size() <= 96;
+        && data.usedQuestionKeys is list && data.usedQuestionKeys.size() <= 256;
     }
     function only(fields) {
       let nextDoc = request.resource.data;

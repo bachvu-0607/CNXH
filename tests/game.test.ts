@@ -175,6 +175,10 @@ test('answer checker rejects false positives and preserves all curated alternati
     for (const acceptable of [q.answer,...(q.acceptedAnswers||[])]) assert.equal(isAnswerCorrect(acceptable,q.answer,q.acceptedAnswers),true,`${q.id}: ${acceptable}`);
   }
 });
+test('question bank keeps unique question IDs', () => {
+  const ids = BOARD_SQUARES.flatMap(square => square.questions.map(question => question.id));
+  assert.equal(new Set(ids).size, ids.length);
+});
 test('host can recover abandoned roll/open/bonus phases, others cannot skip', () => {
   let state = room();
   assert.equal(applyGameAction(state,'b',{type:'skip',turnId:state.turnId},ctx()).success,false);
