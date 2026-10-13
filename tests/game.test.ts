@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { applyGameAction, type GameAction } from '../src/game/engine';
 import { isAnswerCorrect } from '../src/utils/answerChecker';
 import { BOARD_SQUARES } from '../src/questions/boardData';
-import { getAnswerWordLengths } from '../src/utils/answerLength';
+import { getAnswerWordLengths, getAnswerWordMasks } from '../src/utils/answerLength';
 import { room, player } from './fixtures';
 import type { RoomState } from '../src/types/game';
 
@@ -189,6 +189,7 @@ test('answer length hints count letters in each word', () => {
     assert.deepEqual(lengths, expected.map(word => Array.from(word).length), question.id);
   }
   assert.deepEqual(getAnswerWordLengths('Pháp luật'), [4, 4]);
+  assert.deepEqual(getAnswerWordMasks('Giá trị'), ['_ _ _', '_ _ _']);
 });
 test('host can recover abandoned roll/open/bonus phases, others cannot skip', () => {
   let state = room();
