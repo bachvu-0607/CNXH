@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { applyGameAction, type GameAction } from '../src/game/engine';
 import { isAnswerCorrect } from '../src/utils/answerChecker';
 import { BOARD_SQUARES } from '../src/questions/boardData';
-import { getAnswerWordLengths, getAnswerWordMasks } from '../src/utils/answerLength';
+import { formatAnswerTemplate, getAnswerWordLengths, getAnswerWordMasks } from '../src/utils/answerLength';
 import { room, player } from './fixtures';
 import type { RoomState } from '../src/types/game';
 
@@ -192,6 +192,18 @@ test('answer template shows total letters and groups matching blanks by word', (
   assert.deepEqual(getAnswerWordLengths('Pháp luật'), [4, 4]);
   assert.equal(getAnswerWordLengths('Giá trị').reduce((total, length) => total + length, 0), 6);
   assert.deepEqual(getAnswerWordMasks('Giá trị'), ['___', '___']);
+  assert.equal(
+    formatAnswerTemplate('Một giá trị ____; một phạm trù ____; một phạm trù ____', 'Xã hội, chính trị, lịch sử'),
+    '5 chữ: Một giá trị __ ___; 8 chữ: một phạm trù _____ ___; 6 chữ: một phạm trù ____ __',
+  );
+  assert.equal(
+    formatAnswerTemplate('____ là chủ và ____ làm chủ', 'Dân; dân'),
+    '3 chữ: ___ là chủ và 3 chữ: ___ làm chủ',
+  );
+  assert.equal(
+    formatAnswerTemplate('____ Hiến pháp và pháp luật', 'Chấp hành'),
+    '8 chữ: ____ ____ Hiến pháp và pháp luật',
+  );
 });
 test('host can recover abandoned roll/open/bonus phases, others cannot skip', () => {
   let state = room();

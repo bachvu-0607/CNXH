@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CurrentQuestionState, Player } from '../types/game';
 import { CATEGORY_CONFIG } from '../questions/boardData';
-import { getAnswerWordLengths, getAnswerWordMasks } from '../utils/answerLength';
+import { formatAnswerTemplate } from '../utils/answerLength';
 import { sounds } from '../utils/audio';
 import {
   CheckCircle2,
@@ -47,9 +47,10 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   const [resultCountdown, setResultCountdown] = useState<number>(3);
   const [timerRemaining, setTimerRemaining] = useState<number>(60);
   const config = CATEGORY_CONFIG[currentQuestion.category] || CATEGORY_CONFIG.knowledge;
-  const answerWordLengths = getAnswerWordLengths(currentQuestion.officialAnswer);
-  const answerWordMasks = getAnswerWordMasks(currentQuestion.officialAnswer);
-  const totalAnswerLetters = answerWordLengths.reduce((total, length) => total + length, 0);
+  const answerTemplate = formatAnswerTemplate(
+    currentQuestion.answerTemplate || '____',
+    currentQuestion.keyword || currentQuestion.officialAnswer,
+  );
   const isMainPlayer = myPlayerId === currentQuestion.activePlayerId;
   const stealerPlayer = players.find((p) => p.id === currentQuestion.stolenByPlayerId);
   const isStealer = myPlayerId === currentQuestion.stolenByPlayerId;
@@ -215,18 +216,15 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
               </p>
             </div>
 
-            {/* Tổng số chữ và gạch dưới theo từng từ */}
-            {answerWordMasks.length > 0 && (
+            {/* Ngữ cảnh câu hỏi, số chữ còn thiếu và gạch dưới theo từng từ */}
+            {answerTemplate && (
               <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200/80 flex items-start gap-2">
                 <span className="px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[10px] font-bold shrink-0 mt-0.5">
                   Mẫu đáp án
                 </span>
-                <p aria-label={`Tổng ${totalAnswerLetters} chữ cái: ${answerWordMasks.join(' ')}`}
-                  className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm sm:text-base font-semibold text-emerald-950 font-mono tracking-wide leading-relaxed">
-                  <span>Tổng {totalAnswerLetters} chữ:</span>
-                  {answerWordMasks.map((mask, index) => (
-                    <span key={`${index}-${mask}`} className="whitespace-nowrap">{mask}</span>
-                  ))}
+                <p aria-label={answerTemplate}
+                  className="whitespace-pre-wrap text-xs sm:text-sm font-semibold text-emerald-950 font-mono tracking-wide leading-relaxed">
+                  {answerTemplate}
                 </p>
               </div>
             )}
